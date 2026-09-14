@@ -158,8 +158,8 @@ install_homebrew() {
 
 # .zprofile, not .zshrc: zsh reads .zshrc only for interactive shells, so a
 # LaunchAgent or a git hook would get a PATH without Homebrew on it. The prefix
-# is resolved by brew_prefix (/opt/homebrew on Apple Silicon, /usr/local on
-# Intel) because a hardcoded one silently breaks the other arch.
+# still comes from brew_prefix rather than a literal, because that is the one place
+# that asks `brew --prefix` and so gets a non-default prefix right.
 ensure_shellenv() {
   bh_prefix="$(brew_prefix)"
   # The -x guard keeps a profile that outlives Homebrew from erroring on every

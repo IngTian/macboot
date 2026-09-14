@@ -29,10 +29,11 @@ brew "tmux"                # long-running builds survive a terminal close
 brew "htop"                # `top` cannot sort by RSS interactively
 brew "autojump"            # `j <dir>`; the .zshrc block is dead weight without it
 brew "ripgrep"             # every script and every agent search in this repo assumes rg
-# Kept even though recent macOS ships /usr/bin/jq (Apple-signed, com.apple.jq): it is
-# absent on older macOS, and this repo states no minimum version. Deliberately no version
-# number in this comment -- the git line above is what happens when one goes stale.
-brew "jq"                  # apps.tsv/plist inspection; also 70-claude.sh, if it ever merges settings.json
+# NO `brew "jq"`, for the same reason as git above: macOS ships one, Apple-signed as
+# com.apple.jq, at /usr/bin/jq. Both consumers are guarded -- 70-claude.sh gates on
+# `has jq` and 70-aliases.zsh on `_macboot_has jq` -- so the system copy satisfies them.
+# This repo targets current macOS on Apple Silicon and nothing older, which is what makes
+# relying on it safe.
 brew "gnupg"               # signed commits; also gpg-agent for the SSH keys named in the spec
 brew "go"                  # per the decision table: brew go, no goenv (go.mod toolchain since 1.21)
 brew "cmake"               # C/C++ is cmake + ninja only, no vcpkg, no Conan

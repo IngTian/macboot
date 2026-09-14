@@ -96,7 +96,7 @@ account_shell() {
     s="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null |
       sed -n 's/^UserShell: *//p')"
   fi
-  # Linux CI has no dscl; getent, then $SHELL, then give up.
+  # A machine without dscl falls through: getent, then $SHELL, then give up.
   if [ -z "$s" ] && has getent; then
     s="$(getent passwd "$(id -un)" 2>/dev/null | awk -F: '{print $7}')"
   fi

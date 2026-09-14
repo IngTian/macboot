@@ -16,8 +16,7 @@ autoload -Uz compinit
 # so the full audit — and the prompt — recurs forever. Reproduced with a
 # group-writable fpath entry. It is not exotic: Homebrew's share/zsh-completions is
 # owned by the installing user rather than root (verified: drwxr-xr-x zetian admin),
-# so a SECOND account on the same Mac, or the classic group-writable /usr/local
-# layout on Intel, hits it on every shell.
+# so a SECOND account on the same Mac hits it on every shell.
 #
 # -i drops the offending directories instead of asking about them. That is the safe
 # direction of the trade: an insecure directory is one whose completion functions

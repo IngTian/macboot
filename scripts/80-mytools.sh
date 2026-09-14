@@ -207,8 +207,10 @@ tool_witness() {
   clone_or_pull https://github.com/IngTian/witness.git witness "$dir" || return 0
   have_checkout "$dir" || return 0
 
-  # The Makefile names the binary after the target platform, so ask go rather than
-  # hardcoding darwin-arm64 and breaking on an Intel Mac.
+  # The Makefile names the binary after the target platform. Asked of go rather than
+  # written as darwin-arm64: this repo is Apple-Silicon-only so the answer is knowable, but
+  # `go env` also reflects a cross-compiling GOOS/GOARCH in the environment, which a literal
+  # would silently disagree with.
   #
   # Guarded, and inside an `if` so `set -e` is suspended. As a bare assignment a failing
   # `go env` killed the module instantly: on any machine with a shimmed-but-broken Go

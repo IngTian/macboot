@@ -7,16 +7,12 @@
 # ONE file, in a stated order, and no language manager gets to prepend an interpreter
 # directory behind your back.
 
-# Resolved by testing for the binary rather than `eval "$(brew shellenv)"`: shellenv
-# costs a subprocess on every shell start AND prepends brew to PATH, which would
-# silently override the order established below.
-if [[ -x /opt/homebrew/bin/brew ]]; then
-  export HOMEBREW_PREFIX=/opt/homebrew
-elif [[ -x /usr/local/bin/brew ]]; then
-  export HOMEBREW_PREFIX=/usr/local
-else
-  export HOMEBREW_PREFIX=/opt/homebrew # not installed yet; the (N-/) globs drop it
-fi
+# A literal, not `eval "$(brew shellenv)"`. shellenv costs a subprocess on every single
+# shell start AND prepends brew to PATH, which would silently override the order
+# established below. Apple Silicon only (00-preflight.sh refuses anything else), so there
+# is one possible prefix and nothing to detect; if brew is not installed yet the (N-/)
+# globs below drop the entries.
+export HOMEBREW_PREFIX=/opt/homebrew
 
 # Ordering, and why each entry sits where it does:
 #

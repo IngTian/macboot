@@ -40,16 +40,32 @@ report_os() {
   arch="$(uname -m)"
   log "macOS $ver ($build) on $arch"
 
-  # A terminal launched with "Open using Rosetta" reports x86_64 on Apple
-  # Silicon. brew_prefix() then answers /usr/local, so the whole bootstrap
-  # installs an Intel Homebrew that every native tool later ignores -- and
-  # undoing that means deleting a fully populated /usr/local. Cheaper to stop.
+  # Rosetta FIRST, because a translated shell reports x86_64 on an arm64 Mac and would
+  # otherwise be indistinguishable from a genuine Intel machine by the check below -- so it
+  # would get the wrong error message, telling someone their Apple Silicon Mac is
+  # unsupported. Every tool this bootstrap installs from a translated shell would be
+  # x86_64: brew would fetch Intel bottles, cgo would build Intel objects, and none of it
+  # is visible until something native refuses to link against it.
   translated="$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)"
   if [ "$translated" = "1" ]; then
-    die "this shell is running under Rosetta (uname says $arch on an arm64 Mac).
-     Homebrew would be installed into /usr/local instead of /opt/homebrew.
+    die "this shell is running under Rosetta, so it reports $arch on an arm64 Mac.
+     Everything installed from here would be x86_64 -- Intel Homebrew bottles included.
      Uncheck 'Open using Rosetta' in the terminal app's Get Info panel, then re-run."
   fi
+
+  # Apple Silicon only, and now enforced rather than assumed. It was always the real
+  # target: brew_prefix() hardcodes /opt/homebrew, shell/conf.d/00-path.zsh exports it as a
+  # literal, and no CI job has ever run on anything else (macos-26-arm64). Failing here
+  # with a sentence is better than failing at the first missing bottle with a link error --
+  # which is what an Intel Mac used to get, several modules in, after Homebrew had already
+  # populated a prefix nothing else would look in.
+  case "$arch" in
+    arm64) ;;
+    *) die "macboot targets Apple Silicon only, and this reports $arch.
+     Nothing here detects an Intel prefix any more: /opt/homebrew is hardcoded in
+     lib/common.sh and in shell/conf.d/00-path.zsh. Supporting Intel again means
+     restoring both, not just relaxing this check." ;;
+  esac
 }
 
 # The GUI installer that `xcode-select --install` launches is a separate process

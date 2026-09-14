@@ -578,17 +578,18 @@ is_managed() {
   profiles status -type enrollment 2>/dev/null | grep -qi 'Enrolled via DEP: Yes\|MDM enrollment: Yes'
 }
 
-# brew_prefix -- Homebrew's prefix on this arch, without assuming it is installed.
-# Apple Silicon is /opt/homebrew, Intel /usr/local; hardcoding either breaks one.
+# brew_prefix -- Homebrew's prefix, without assuming it is installed yet.
+#
+# Two branches, not four. This repo targets Apple Silicon only (00-preflight.sh refuses
+# anything else), where Homebrew's prefix is /opt/homebrew, so the /usr/local branch and
+# the `uname -m` fallback that chose between them are gone. `brew --prefix` is still asked
+# first rather than assumed: it costs one subprocess and it is the only thing that gets a
+# non-default prefix right.
 brew_prefix() {
   if has brew; then
     brew --prefix
-  elif [ -x /opt/homebrew/bin/brew ]; then
-    echo /opt/homebrew
-  elif [ -x /usr/local/bin/brew ]; then
-    echo /usr/local
   else
-    case "$(uname -m)" in arm64) echo /opt/homebrew ;; *) echo /usr/local ;; esac
+    echo /opt/homebrew
   fi
 }
 
