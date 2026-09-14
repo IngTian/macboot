@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # 30-python.sh -- uv, and deliberately nothing else that manages a Python.
 #
-# Why no conda: measured on the source machine, every library in the owner's stack
-# ships an arm64 or universal2 wheel, so conda's one genuinely unique capability --
-# shipping non-Python dependencies (MKL, CUDA, GDAL) as conda packages -- buys
-# nothing on this hardware. What it does buy is a base env prepended to PATH from
-# .zshrc holding 217 pip packages, which is why Paper6R, watchboard, market-witness
-# and tokscale silently resolved `python` against it instead of against anything
-# they declared. Note this module does not *remove* the existing miniconda: that is
-# blocked until those four migrate (spec requirement 3) and is sequenced elsewhere.
-# It only stops adding to the problem.
+# Why no conda: every library in the stack this was written for ships an arm64 or
+# universal2 wheel, so conda's one genuinely unique capability -- shipping non-Python
+# dependencies (MKL, CUDA, GDAL) as conda packages -- buys nothing on this hardware. What
+# it does buy is a base env prepended to PATH from .zshrc, which is how a project ends up
+# resolving `python` against several hundred packages nobody declared.
+#
+# This module does not *remove* an existing miniconda, and the reason is narrower than it
+# used to be. The blocker is not "projects need conda" -- a PEP-621 project with a
+# requires-python does not care. It is that any .venv ALREADY BUILT from conda's
+# interpreter has `bin/python` symlinked into the conda prefix, so deleting the prefix
+# breaks the venv. Recreating those (`rm -rf .venv && uv sync`) is the actual migration,
+# and it is per project rather than a program of work. Sequenced outside this repo either
+# way: a bootstrap has no business deleting an interpreter someone's venvs point at.
+#
+# The --default flag on the install below is what stops the problem recurring: it is what
+# makes a fresh `uv sync` pick uv's own interpreter instead of whatever leads PATH.
 #
 # Why no pyenv: it builds interpreters from source (minutes, and a compiler-flag
 # hunt on every macOS upgrade) and then holds a second opinion about which python
@@ -110,7 +117,7 @@ install_python() {
   if [ -z "$uv" ]; then
     # The dry-run path on a fresh machine: uv does not exist yet, so there is
     # nothing to interrogate. Say what would happen rather than inventing state.
-    log "would run: uv python install $MACBOOT_PYTHON (once uv exists)"
+    log "would run: uv python install --default $MACBOOT_PYTHON (once uv exists)"
     return 0
   fi
 
@@ -147,9 +154,27 @@ install_python() {
     return 0
   fi
 
+  # --default is what makes this repo's "uv owns Python" claim true rather than aspirational.
+  #
+  # Without it uv installs only a VERSIONED shim (python3.13), so the bare `python3` name is
+  # left to whatever else is on PATH -- and on any machine that ran this Brewfile that is
+  # brew's python@3.14, which nobody chose: it arrives as a transitive dependency of
+  # pre-commit, ollama and autojump (`brew deps pre-commit` lists python@3.14). So the
+  # module installed a uv interpreter and then let an accident win, while README.md claimed
+  # "uv. No pyenv, no conda, no bare venv".
+  #
+  # With --default uv also writes unversioned `python`/`python3` into ~/.local/bin, which
+  # 00-path.zsh puts FIRST, ahead of both brew and any conda prepend. Measured on the
+  # audited machine: uv already placed ~/.local/bin/python3.11 there itself, so this is uv's
+  # own mechanism rather than something invented here. Plain flag on uv 0.11.16, no --preview.
+  #
+  # It also fixes a subtler thing: a conda-first PATH made `uv sync` build project venvs
+  # against conda's interpreter (seen in the wild -- a pyvenv.cfg reading `uv = 0.11.16`
+  # with `home = .../miniconda/base/bin`). Putting uv's own python first stops that.
+  #
   # One opaque ~30 MB download and unpack, no incremental output worth showing.
-  spin_start "uv python install $MACBOOT_PYTHON"
-  if ! run env HOME="$MACBOOT_HOME" "$uv" python install "$MACBOOT_PYTHON"; then
+  spin_start "uv python install --default $MACBOOT_PYTHON"
+  if ! run env HOME="$MACBOOT_HOME" "$uv" python install --default "$MACBOOT_PYTHON"; then
     spin_stop
     # Not fatal: uv itself is installed and every project can still pin its own
     # interpreter on first `uv sync`. Only the pre-warmed default is missing.

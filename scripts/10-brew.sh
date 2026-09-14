@@ -11,11 +11,16 @@
 # 2. It installs formula by formula instead of handing the file to `brew bundle
 #    install`, because `brew bundle` cannot distinguish "absent" from "outdated"
 #    and its remedy for both is an upgrade. Measured on the source machine
-#    (Homebrew 7.0.1): `brew bundle check --file=Brewfile` calls 12 of the 18
-#    must-haves unsatisfied while only 7 are actually absent -- gh, fzf, tmux,
-#    htop and gnupg are installed and merely behind. `brew bundle install` would
-#    have upgraded all five. So `check` is used only as the fast all-satisfied
-#    path, and `brew list` decides what is genuinely missing.
+#    (Homebrew 7.0.1): `brew bundle check` reported MORE of this file unsatisfied
+#    than were actually absent -- gh, fzf, tmux, htop and gnupg were installed and
+#    merely behind, and `brew bundle install` would have upgraded all five. So
+#    `check` is used only as the fast all-satisfied path, and `brew list` decides
+#    what is genuinely missing.
+#
+#    No counts in that paragraph on purpose. It used to say "12 of the 17", which one
+#    Brewfile edit made wrong in three places; the corrected "18" was stale again within
+#    the hour, when `git` came out of the file. The RATIO is the finding and it is stable;
+#    the integers were decoration that needed maintaining.
 set -euo pipefail
 # SC1091 disabled alongside the source= directive: the path is computed, so plain
 # `shellcheck` cannot follow it and emits an info that still fails the exit
