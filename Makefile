@@ -101,6 +101,7 @@ test: lint ## lint, bash -n, then the real tests: purity, bootstrap flow, idempo
 	@# verifies idempotency at all, was reachable from no target.
 	@bash tests/dry-run-purity.sh
 	@bash tests/bootstrap-markers.sh
+	@bash tests/common-helpers.sh
 	@bash tests/check-unpushed.sh
 	@bash tests/double-run.sh
 

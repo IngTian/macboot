@@ -165,7 +165,20 @@ uv_tool_install() {
   dir="$1"
   tool="$2"
   rc=0
-  if uv tool list 2>/dev/null | grep -q "^$tool "; then
+  # In a dry run, describe and return: `uv tool list` creates ~/.cache/uv (measured),
+  # which is the same cache 30-python.sh already guards a probe against, and --dry-run
+  # must write nothing. Nothing below it would run anyway, since run() is inert there.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "would uv tool install $dir (--force if the checkout moved) -> $UV_TOOL_BIN_DIR"
+    return 0
+  fi
+  # Colour forced OFF for this one call, and the `^` anchor kept. With FORCE_COLOR or
+  # CLICOLOR_FORCE set in the environment -- ordinary on a developer's machine -- uv wraps
+  # the tool name in ANSI, so `^$tool ` never matched, every run took the --force branch,
+  # and a second run reported changed=2 instead of 0. Suppressing the colour at the source
+  # is what keeps the anchor: dropping it instead would let `logs` match `daylogs `.
+  if env -u FORCE_COLOR -u CLICOLOR_FORCE NO_COLOR=1 uv tool list 2>/dev/null |
+    grep -q "^$tool "; then
     if [ "$CLONE_STATE" = "current" ]; then
       skip "$tool -> already installed, checkout unchanged"
       return 0
@@ -193,7 +206,30 @@ tool_witness() {
 
   # The Makefile names the binary after the target platform, so ask go rather than
   # hardcoding darwin-arm64 and breaking on an Intel Mac.
-  bin="$dir/bin/witness-$(go env GOOS)-$(go env GOARCH)"
+  #
+  # Guarded, and inside an `if` so `set -e` is suspended. As a bare assignment a failing
+  # `go env` killed the module instantly: on any machine with a shimmed-but-broken Go
+  # (goenv or asdf pointing at a version a cleanup deleted -- true on THIS machine, where
+  # `go env` prints "cannot find GOROOT directory: ~/.goenv/versions/1.25.1" and exits 2)
+  # `make mytools-plan` ended right after a green "witness -> cloned" tick, with no warn,
+  # no die and no summary box, and daylogs/manifold/trading-desk silently never ran.
+  # `go env` also writes go's telemetry counter file into ~/Library/Application Support/go
+  # in a dry run, which is a --dry-run purity violation on its own; the value is only used
+  # for a "would link" line there, so skip the probe entirely.
+  if [ "$DRY_RUN" = "1" ]; then
+    # Named, not resolved. Nothing is built in a dry run, so the only consumer is the
+    # "would link" line below -- and running the probe would write go's telemetry counter
+    # into ~/Library/Application Support/go, which --dry-run promises not to do. The rest
+    # of this function still runs, so the transcript keeps its "would make" line.
+    bin="$dir/bin/witness-<goos>-<goarch>"
+  elif ! goos="$(go env GOOS 2>/dev/null)" || ! goarch="$(go env GOARCH 2>/dev/null)" ||
+    [ -z "$goos" ] || [ -z "$goarch" ]; then
+    warn "witness -> 'go' is on PATH but 'go env' failed (a broken goenv/asdf shim?);
+     skipping. Check 'go env GOOS' by hand, then re-run --only 80-mytools."
+    return 0
+  else
+    bin="$dir/bin/witness-$goos-$goarch"
+  fi
 
   # `make install` is NOT used on purpose: it also downloads an embedding model and
   # rewires Claude Code's hooks and MCP servers. A bootstrap installs a binary; it
@@ -326,6 +362,15 @@ tool_trading_desk() {
   # config with normal host-key verification. LogLevel=ERROR suppresses the "Permanently
   # added" line, which would otherwise announce a write that no longer happens.
   url=''
+  # Neither probe runs in a dry run. The known_hosts leak above was fixed by hardening
+  # the ssh probe, but `gh repo view` has its own write: on first use gh creates
+  # ~/.local/state/gh/device-id (measured against a fresh HOME) and makes an
+  # authenticated API call. A dry run must write nothing anywhere, and since nothing is
+  # cloned there the answer is only needed to choose between two URL spellings.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "would check whether $slug is reachable (gh, then ssh) and clone it into $dir if so"
+    return 0
+  fi
   if has gh && gh repo view "$slug" >/dev/null 2>&1; then
     url="https://github.com/$slug.git"
   elif GIT_TERMINAL_PROMPT=0 \

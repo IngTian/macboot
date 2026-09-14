@@ -239,7 +239,22 @@ spin_stop() {
 
 # Kill the spinner on any exit path. Without this, an interrupted run leaves a
 # background process spinning forever on a shell the user has already left.
-trap 'spin_stop' EXIT INT TERM
+#
+# INT and TERM RE-RAISE the signal after cleaning up; they used to share the EXIT
+# handler, and a bash trap handler that simply returns does NOT terminate the script.
+# So Ctrl-C was swallowed outright: the module resumed at the next command and ran every
+# remaining mutation to completion. Measured through a real pty -- ^C at mutation 3 of 12
+# left all 12 on disk, and stripping this one line made the same run stop at 3. On a real
+# Mac that meant Ctrl-C during 60-macos.sh still applied the remaining `defaults` writes
+# and Ctrl-C during 20-shell.sh still finished rewriting .zshrc, after the user had
+# decided to stop ("wrong machine", "I meant --dry-run"), with bootstrap.sh printing
+# "interrupted" only once the child had already done everything. It also meant mark_done
+# was never reached, so a module that fully succeeded re-ran anyway -- the opposite of
+# what that message promises. Resetting to the default disposition before re-raising is
+# what makes the shell die FROM the signal instead of recursing into this handler.
+trap 'spin_stop' EXIT
+trap 'spin_stop; trap - INT; kill -INT $$' INT
+trap 'spin_stop; trap - TERM; kill -TERM $$' TERM
 
 # die() exits non-zero. Modules should die on "the machine is not in a state I can
 # safely change" and warn on "this one optional thing is unavailable" -- a bootstrap
@@ -362,8 +377,33 @@ $end"
       return 0
     fi
     tmp="$file.macboot.$$"
-    awk -v b="$begin" -v e="$end" \
-      'index($0,b){f=1;next} index($0,e){f=0;next} !f{print}' "$file" >"$tmp"
+    # Anchored to the FIRST MATCHED PAIR, and it refuses to write at all if the pair
+    # does not close.
+    #
+    # The previous version toggled on both fences with no memory: `index($0,b){f=1;next}
+    # index($0,e){f=0;next} !f{print}`. A begin fence with no end fence therefore left it
+    # toggled on to end-of-file and DELETED every line below the marker -- the user's own
+    # aliases, exports and prompt setup -- while printing a green "block replaced" and
+    # taking no backup. Reproduced on a 10-line .zshrc: the 4 lines of personal config
+    # below the fence were gone after one run. One hand-edit that drops the closing line
+    # is enough, and `index()` is SUBSTRING matching, so a comment merely quoting the
+    # fence text re-opened the delete even in a file whose real pair was well formed.
+    # `seen` closes both: after one region every remaining line is copied verbatim, and
+    # END makes "never closed" an error instead of a silent truncation.
+    if ! awk -v b="$begin" -v e="$end" '
+      seen { print; next }
+      !f && index($0, b) { f = 1; next }
+      f && index($0, e) { f = 0; seen = 1; next }
+      !f { print }
+      END { if (!seen) exit 1 }' "$file" >"$tmp"; then
+      rm -f "$tmp"
+      warn "block $marker in $(basename "$file"): found the opening fence but no closing
+     fence after it, so macboot cannot tell where its own block ends. NOTHING was
+     changed -- deleting to end-of-file would take your own config with it. Restore
+     the closing line, or delete the opening one:
+         $end"
+      return 0
+    fi
     printf '%s\n' "$desired" >>"$tmp"
     if [ -L "$file" ]; then
       # Write THROUGH the symlink. `mv tmp link` replaces the LINK ITSELF with a
@@ -373,7 +413,15 @@ $end"
       # a public repo, so a ~/.zshrc symlinked out of a stow/chezmoi checkout is an
       # ordinary case. Atomicity is traded away knowingly; a detached dotfiles repo
       # is the worse failure, because it is silent and discovered weeks later.
-      cat "$tmp" >"$file" || die "ensure_block: cannot write through symlink $file"
+      # The recovery file is named on purpose: `rm -f "$tmp"` runs only AFTER the cat
+      # succeeds, so any write error or kill in the (measured: ~2.5 ms) window leaves a
+      # COMPLETE copy of the intended file at $tmp, including every preserved line from
+      # outside the fence. That is the fact that actually justifies trading atomicity
+      # away here, and a message that does not mention it turns the best safety property
+      # in this function into one nobody finds.
+      cat "$tmp" >"$file" ||
+        die "ensure_block: cannot write through symlink $file
+     (the complete new file is at $tmp -- copy it into place by hand)"
       rm -f "$tmp"
     else
       # Carry the original mode across before the rename: a fresh temp file gets
@@ -381,7 +429,7 @@ $end"
       if mode="$(stat -f '%Lp' "$file" 2>/dev/null)" && [ -n "$mode" ]; then
         chmod "$mode" "$tmp"
       fi
-      mv "$tmp" "$file"
+      mv "$tmp" "$file" || die "ensure_block: cannot replace $file (new file left at $tmp)"
     fi
     MACBOOT_CHANGED=$((MACBOOT_CHANGED + 1))
     ok "block $marker in $(basename "$file") -> replaced"
@@ -394,7 +442,13 @@ $end"
     return 0
   fi
   run mkdir -p "$(dirname "$file")"
-  printf '\n%s\n' "$desired" >>"$file"
+  # Checked, like the two write paths above. Unchecked, a destination that cannot be
+  # written -- a symlink into a read-only volume is the realistic one -- printed
+  # "line 397: Permission denied" from the shell and then macboot's own green
+  # "block appended", incremented MACBOOT_CHANGED and returned 0: a false success that
+  # also made the changed counter, and therefore the double-run test, meaningless.
+  printf '\n%s\n' "$desired" >>"$file" ||
+    die "ensure_block: cannot append the $marker block to $file"
   MACBOOT_CHANGED=$((MACBOOT_CHANGED + 1))
   ok "block $marker in $(basename "$file") -> appended"
 }

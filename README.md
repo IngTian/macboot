@@ -110,8 +110,8 @@ ever removed one. No single line was wrong; the file was. An append-only file th
 installers all hold a write lock on ends up that way by construction.
 
 "Many small files must be slow" is the obvious objection, so it is measured rather than
-argued. All 9 units cost **54 ms**, of which 40 ms is zsh-autosuggestions + fzf and
-12 ms is a cold `compinit`; the glob, the merge and the 9 `source` calls together are
+argued. All 8 units cost **54 ms**, of which 40 ms is zsh-autosuggestions + fzf and
+12 ms is a cold `compinit`; the glob, the merge and the 8 `source` calls together are
 under 1 ms. The `.zshrc` it replaces took 1,530 ms.
 
 ```sh
@@ -125,7 +125,8 @@ MACBOOT_ZSH_PROFILE=1 exec zsh   # per-unit startup cost, so "my shell got slow"
 assumes:
 
 > git · gh · zsh-autosuggestions · zsh-completions · fzf · tmux · htop · autojump ·
-> ripgrep · jq · gnupg · go · cmake · ninja · shellcheck · shfmt · pre-commit
+> ripgrep · jq · gnupg · go · cmake · ninja · shellcheck · shfmt · pre-commit ·
+> ollama (the runner only — no models are pulled)
 
 plus **uv** and **nvm** via their own installers, because their brew
 formulae are either absent or a known conflict.
@@ -133,7 +134,7 @@ formulae are either absent or a known conflict.
 **Nice-to-have** — `Brewfile.optional`, installed only if you run `make optional`.
 Your call; skipping it costs you nothing structural:
 
-> fd · bat · tree · eza · yq · direnv · zoxide · ollama · tectonic · redis ·
+> fd · bat · tree · eza · yq · direnv · zoxide · tectonic · redis ·
 > mkcert · p7zip · poppler · gifsicle · cowsay
 
 **My own tools** — `make mytools`. Three are public and get built from source:

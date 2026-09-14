@@ -142,6 +142,18 @@ _remember() {
     /*) ;;
     *) common="$repo/$common" ;;
   esac
+  # Normalise through the filesystem before comparing. git answers this question in two
+  # different spellings: the MAIN checkout gets the RELATIVE `.git`, which then inherits
+  # whatever path the caller walked in on, while a LINKED worktree gets an ABSOLUTE
+  # realpath. Any symlink component in the root makes those two strings differ, so the
+  # fold silently failed and one repository was scanned, reported and bundled twice.
+  # Measured on the same fixture: root `/var/folders/.../r3` -> "2 repos (0 folded)",
+  # root `/private/var/folders/.../r3` -> "1 repos (1 folded)". macOS's /tmp and /var are
+  # both symlinks and a symlinked root is the case `-H` in _find_git_dirs exists to
+  # support, so this is the normal path, not an exotic one. It also repairs the
+  # "main checkout wins" test below, which compares against an already-realpath'd
+  # --absolute-git-dir.
+  common="$(cd "$common" 2>/dev/null && pwd -P || printf '%s' "$common")"
   gitdir="$(git -C "$repo" rev-parse --absolute-git-dir 2>/dev/null || true)"
   j=0
   while [ "$j" -lt "$REPO_N" ]; do
@@ -158,7 +170,7 @@ _remember() {
 }
 
 discover_repos() {
-  local roots root repo gitpath accepted
+  local roots root repo gitpath _dr_out
   roots="$MACBOOT_REPO_ROOTS"
   while [ -n "$roots" ]; do
     case "$roots" in
@@ -183,31 +195,49 @@ discover_repos() {
 
     # `.git` by name, not as a directory: a worktree checkout and a submodule each
     # have a .git *file*. Excluding */.git/* keeps the walk out of .git/modules/,
-    # which would otherwise report every submodule a second time. A heredoc rather
-    # than a pipe, because a `while read` right of a pipe runs in a subshell and
-    # every repo it appended would be lost at the done.
-    accepted=''
+    # which would otherwise report every submodule a second time.
+    #
+    # The paths come back through a FILE, not a command substitution. Written as
+    # `done <<EOF / $(_find_git_dirs "$root") / EOF` the finder ran in a SUBSHELL, so
+    # its SCAN_ERRORS bump and its warn() counter increment were both discarded at the
+    # closing paren: the "a partial scan cannot produce a clean verdict" gate in main()
+    # read 0 forever, and --verify exited 0 over a tree it could not finish walking --
+    # the same fail-open class `-H` was added to close, one level up. Only the warning
+    # TEXT survived, which is why a transcript looked correct. Reproduced with one
+    # chmod-000 directory beside a readable repo: warning on screen, "0 warnings" in the
+    # summary box, exit 0, and the repo behind it never opened. Reading from a file also
+    # keeps the `while` loop in THIS shell, which is what the heredoc was for.
+    _dr_out="${TMPDIR:-/tmp}/macboot-repos.$$"
+    if ! _find_git_dirs "$root" "$_dr_out"; then
+      SCAN_ERRORS=$((SCAN_ERRORS + 1))
+    fi
     while IFS= read -r gitpath; do
       [ -n "$gitpath" ] || continue
       repo="$(dirname "$gitpath")"
-      # Nested checkouts -- submodules, and the legitimate .claude/worktrees/ trees
-      # inside a repo -- are not separate repos: their refs live in the parent's
-      # object store, so listing them double-counts the same commits. Every path
-      # with prefix "P/" is contiguous in a lexicographic sort, so one test against
-      # the last accepted repo drops the whole nested block.
-      if [ -n "$accepted" ]; then
-        case "$repo/" in "$accepted"/*) continue ;; esac
-      fi
+      # No path-prefix prune here, on purpose. There used to be one, dropping every
+      # .git under an already-accepted repo as "nested, so its refs live in the
+      # parent's object store". That is true of a linked worktree and FALSE of a
+      # submodule -- whose objects live in <super>/.git/modules/<name> -- and false of
+      # an independent clone dropped inside another project's tree. Both were deleted
+      # from the scan before any check ran: a submodule one commit ahead of its own
+      # origin gave "1 of 1 repos are fully pushed with a clean tree" and exit 0, and
+      # `git -C <super> cat-file -e <sub HEAD>` confirms the commit is in no object
+      # store but the submodule's own. _remember folds by `git rev-parse
+      # --git-common-dir`, which is the identity test that actually distinguishes the
+      # two: it still folds worktrees and it keeps submodules.
       _remember "$repo"
-      accepted="$repo"
-    done <<EOF
-$(_find_git_dirs "$root")
-EOF
+    done <"$_dr_out"
+    rm -f "$_dr_out"
   done
 }
 
-# _find_git_dirs <root> -- every .git under root, sorted. Prints nothing on failure and
-# bumps SCAN_ERRORS instead of pretending the root was empty.
+# _find_git_dirs <root> <outfile> -- every .git under root, sorted, into <outfile>.
+# Returns non-zero when the walk was incomplete, so the CALLER can count it.
+#
+# The counting deliberately lives in discover_repos rather than here: this function used
+# to bump SCAN_ERRORS itself, but it was invoked inside a command substitution, so the
+# increment happened in a subshell and never reached the gate. Writing to a file the
+# caller names is what puts both the loop and the counter in one shell.
 #
 # -H is the fix for the worst fail-open in this file. Without it, find does not follow
 # a SYMLINKED root, so `ln -s /Volumes/Data/devpro ~/devpro` -- or any root under macOS's
@@ -222,19 +252,22 @@ EOF
 # -maxdepth argument look identical to an empty directory.
 _find_git_dirs() {
   _fg_root="$1"
+  _fg_out="$2"
   _fg_err="${TMPDIR:-/tmp}/macboot-find.$$"
   _fg_rc=0
   find -H "$_fg_root" -maxdepth "$MACBOOT_REPO_DEPTH" -name .git \
     -not -path '*/.git/*' -not -path '*/node_modules/*' \
-    -print 2>"$_fg_err" | LC_ALL=C sort || _fg_rc=$?
+    -print 2>"$_fg_err" | LC_ALL=C sort >"$_fg_out" || _fg_rc=$?
   # find exits non-zero on unreadable subdirectories too, which is a partial scan and
   # therefore still a reason not to trust a clean verdict.
   if [ "$_fg_rc" != 0 ] || [ -s "$_fg_err" ]; then
-    SCAN_ERRORS=$((SCAN_ERRORS + 1))
     warn "scanning $_fg_root was incomplete (find exit $_fg_rc):
      $(head -2 "$_fg_err" 2>/dev/null | sed 's/^/     /')"
+    rm -f "$_fg_err"
+    return 1
   fi
   rm -f "$_fg_err"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -284,10 +317,25 @@ check_origin() {
 
   case "$rc" in
     0) ;;
-    # --exit-code answers 2 for "connected fine, the remote has no refs". The
-    # server replied, so the remote exists; an empty origin is caught by the
-    # branch check instead, where every local branch shows up as unpushed.
-    2) _note "origin is reachable but holds no refs yet" ;;
+    # --exit-code answers 2 for "connected fine, the remote has no refs".
+    #
+    # That is only harmless when this repo has no commits either. It used to be a bare
+    # note, on the reasoning that "an empty origin is caught by the branch check instead"
+    # -- but the branch check reads refs/remotes/origin/*, which is a LOCAL CACHE that
+    # survives the server being emptied. Reproduced: push to a bare origin, delete
+    # refs/heads/main from it, and `ls-remote` advertises zero refs while
+    # `branch -vv` still says "[origin/main]" with nothing ahead, so every check cleared
+    # the repo and --verify exited 0 for a remote that provably holds none of its
+    # commits. That is the first failure this file's header names, so the server's answer
+    # has to win over the cache. rev-list guards the genuinely-empty-both-ends case.
+    2)
+      if [ -n "$(git -C "$repo" rev-list -n1 --all 2>/dev/null || true)" ]; then
+        _finding "origin answered but holds NO refs ($url): the server has none of your commits"
+        BUNDLE_ME=1
+      else
+        _note "origin is reachable but holds no refs yet"
+      fi
+      ;;
     124) _finding "origin did not answer within ${MACBOOT_REMOTE_TIMEOUT}s ($url): offline, or gone" ;;
     *)
       # "The network is down" and "this remote no longer exists" demand opposite
@@ -406,7 +454,14 @@ check_dirty() {
   # first being this one, so the tail is exactly the linked set.
   while IFS= read -r wt; do
     [ -n "$wt" ] || continue
-    [ "$wt" != "$repo" ] || continue
+    # Two spellings of "this is the main checkout, skip it": $wt comes from `worktree
+    # list --porcelain`, which always prints a REALPATH, while $repo is the path find(1)
+    # walked in on. Under a symlinked root (macOS /tmp and /var are symlinks) they differ,
+    # so the main checkout was re-reported as one of its own linked worktrees and a single
+    # dirty file produced two findings. --show-toplevel gives the realpath spelling.
+    [ "$wt" != "$repo" ] &&
+      [ "$wt" != "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || true)" ] ||
+      continue
     [ -d "$wt" ] || continue
     wn="$(git -C "$wt" status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ' || true)"
     [ -n "$wn" ] || wn=0
@@ -437,24 +492,62 @@ EOF
 #     an annotated release tag can be the only record of what was built.
 #
 # Both tests are OFFLINE: "is this commit contained in any remote-tracking ref". That is
-# the right question and it costs no network call. Its limit, stated rather than
-# hidden: a tag whose commit IS pushed but whose tag ref is not gets no finding. The
-# commit is safe and the label is recreatable, so it is a documentation loss rather than
-# a data loss -- unlike everything else this tool reports.
+# the right question and it costs no network call.
+#
+# KNOWN REMAINING GAP, stated rather than hidden: a tag whose COMMIT is pushed but whose
+# TAG REF was never pushed gets no finding, because `--not --remotes` subtracts that
+# commit. For a lightweight tag that is genuinely just a recreatable label. For an
+# ANNOTATED tag it is not -- the ref points at a tag OBJECT carrying tagger, date and
+# message, and `git push` does not carry tags, so that object can exist on exactly one
+# disk while this tool prints "fully pushed with a clean tree" and exits 0. Reproduced:
+# `git tag -a v3 -m rel` on an already-pushed commit, then `cat-file -e` in the bare
+# origin reports the tag object ABSENT. Closing it needs one `ls-remote --tags` per repo
+# (offline it is not decidable), which is a network call this function deliberately does
+# not make -- so it is a gap, not a decision that the content does not matter.
 check_detached_and_tags() {
-  local repo head n_tags t
+  local repo head n_tags t wt
   repo="$1"
 
-  # symbolic-ref fails exactly when HEAD is detached.
-  if ! git -C "$repo" symbolic-ref -q HEAD >/dev/null 2>&1; then
-    head="$(git -C "$repo" rev-parse --short HEAD 2>/dev/null || true)"
-    if [ -n "$head" ]; then
-      if [ -z "$(git -C "$repo" branch -r --contains HEAD 2>/dev/null || true)" ]; then
-        _finding "HEAD is detached at $head and that commit is on no remote branch"
-      else
-        _note "HEAD is detached at $head (already on a remote branch)"
-      fi
+  # Once per CHECKOUT, not once per repo. _remember deliberately folds a linked worktree
+  # into its main checkout -- correct for commits, which share the object store -- so a
+  # detached HEAD in a worktree was never asked about at all: this ran only on the
+  # surviving path. Reproduced with `worktree add --detach` plus one commit, both nested
+  # and sibling: "1 of 1 repos are fully pushed with a clean tree", exit 0, for a commit
+  # reachable from nothing but that worktree's HEAD. The tool's own motivating incident
+  # was a lost worktree, so this is the last place it should have a blind spot. The main
+  # checkout is the first line of `worktree list --porcelain`, so it is still covered.
+  while IFS= read -r wt; do
+    [ -n "$wt" ] && [ -d "$wt" ] || continue
+    # symbolic-ref fails exactly when HEAD is detached.
+    git -C "$wt" symbolic-ref -q HEAD >/dev/null 2>&1 && continue
+    head="$(git -C "$wt" rev-parse --short HEAD 2>/dev/null || true)"
+    [ -n "$head" ] || continue
+    if [ -z "$(git -C "$wt" branch -r --contains HEAD 2>/dev/null || true)" ]; then
+      _finding "HEAD is detached at $head in $(basename "$wt") and that commit is on no remote branch"
+    else
+      _note "HEAD is detached at $head in $(basename "$wt") (already on a remote branch)"
     fi
+  done <<EOF
+$(git -C "$repo" worktree list --porcelain 2>/dev/null |
+    sed -n 's/^worktree //p' || true)
+EOF
+
+  # `--not --remotes` subtracts nothing when there are no remote-tracking refs, so with no
+  # origin at all EVERY tag in the repo reads as unpushed -- arithmetically guaranteed,
+  # and a third finding on a repo that check_origin has already condemned twice. Verified
+  # on a fixture with 3 tags and no remote: "no origin remote configured; 1 local
+  # branch(es) with no upstream; 3 tag(s) point at commits on no remote branch". Nothing
+  # is lost by staying quiet: check_origin's `_finding "no origin remote configured"` at
+  # the top of the file is unconditional, so --verify still refuses, and `bundle create
+  # --all` demonstrably carries refs/tags (checked with `bundle list-heads`).
+  #
+  # Keyed on the origin URL, NOT on refs/remotes being empty. The refs/remotes test is
+  # the tempting version and it is strictly weaker: it would also silence a repo whose
+  # origin is configured and reachable but never fetched, where the tags may be genuinely
+  # unpushed and check_origin stays silent. Because the URL is exactly the condition under
+  # which check_origin has already produced a finding, this can never turn a red green.
+  if [ -z "$(git -C "$repo" config --get remote.origin.url 2>/dev/null || true)" ]; then
+    return 0
   fi
 
   # One rev-list per repo rather than per tag: --tags asks for everything reachable from
@@ -494,6 +587,16 @@ check_repo() {
   check_detached_and_tags "$repo"
   check_worktrees "$repo"
   check_dirty "$repo"
+  # ANY finding makes the repo worth bundling, not just a missing or dead origin.
+  #
+  # BUNDLE_ME used to be set only by check_origin, so the common retirement case -- a
+  # repo with a live GitHub origin plus local-only stashes, local tags or a detached-HEAD
+  # experiment -- got "no repo needs a bundle: every origin resolved", exit 0, and no
+  # destination directory created at all. check_stash's own message tells the user
+  # "--bundle does" carry stashes, so the tool advertised a rescue and then, asked for it,
+  # printed a green all-clear and wrote nothing. Bundling a repo that has findings is
+  # never harmful, and _bundle_is_current still keeps a second run at changed=0.
+  [ -z "$FINDINGS" ] || BUNDLE_ME=1
   return 0
 }
 
@@ -517,21 +620,61 @@ check_repo() {
 # Existence is not enough: a bundle written last week verifies happily while
 # missing the commits you are wiping the disk for. Comparing ref lists is what
 # lets a second --bundle run report changed=0 without lying.
+#
+# HEAD is part of the comparison, not filtered out of it. `--all` records HEAD, and a
+# DETACHED HEAD is the one ref whose commit is on no branch -- exactly what this tool
+# reports as work existing in one place only. Dropping it meant a detached commit made
+# after the first --bundle was in no bundle, while the same run printed "already holds
+# every current ref" and exited 0: the tool asserted a backup contained a commit it had
+# just finished warning was unique. `show-ref --head` is the matching spelling, and for a
+# non-detached repo both sides are byte-identical, so changed=0 on a re-run is preserved.
 _bundle_is_current() {
   local have want
-  have="$(git -C "$2" bundle list-heads "$1" 2>/dev/null | grep -v ' HEAD$' | LC_ALL=C sort || true)"
-  want="$(git -C "$2" show-ref 2>/dev/null | LC_ALL=C sort || true)"
+  have="$(git -C "$2" bundle list-heads "$1" 2>/dev/null | LC_ALL=C sort || true)"
+  want="$(git -C "$2" show-ref --head 2>/dev/null | LC_ALL=C sort || true)"
   [ -n "$have" ] && [ "$have" = "$want" ]
 }
 
+# _bundle_restores <bundle> -- does the pack actually read back?
+#
+# `git bundle verify` reads only the bundle HEADER: the prerequisite commits and the ref
+# list. Measured: it exits 0 and prints "The bundle records a complete history" for a
+# bundle truncated to 60% AND for one with a single flipped byte in the pack, while
+# `git clone` of the same file dies with "early EOF / index-pack died". So verify alone
+# cannot support the claim this mode exists to make. Unbundling into a throwaway bare
+# repo walks every object, which is the cheapest check that actually reads the pack.
+_bundle_restores() {
+  _br_tmp="$(mktemp -d)" || return 1
+  _br_rc=0
+  if ! git init -q --bare "$_br_tmp/probe" >/dev/null 2>&1; then
+    _br_rc=1
+  elif ! git -C "$_br_tmp/probe" bundle unbundle "$1" >/dev/null 2>&1; then
+    _br_rc=1
+  fi
+  rm -rf "$_br_tmp"
+  return "$_br_rc"
+}
+
 bundle_repos() {
-  local dir repo name target seen i rc out base parent attempt
+  local dir repo name target seen key i rc out base parent attempt
   dir="$1"
   if [ "$BUNDLE_N" -eq 0 ]; then
-    ok "no repo needs a bundle: every origin resolved"
+    ok "no repo needs a bundle: nothing found that a bundle would rescue"
     return 0
   fi
   [ -d "$dir" ] || run mkdir -p "$dir"
+  # ABSOLUTE from here on. Every write below is `git -C "$repo" bundle create <target>`,
+  # and git resolves a relative target inside the REPO, not the caller's cwd. So
+  # `cd /Volumes/Backup && check-unpushed.sh --bundle .` -- the most natural way to type
+  # it -- wrote every bundle into the repo about to be erased, left the external drive
+  # empty, and printed "written and verified" for each one. _bundle_is_current stat'd yet
+  # a third path (relative to the cwd), so the "already current" skip never matched
+  # either and every re-run re-bundled. Skipped under DRY_RUN because the mkdir above is
+  # skipped there too, so the directory may legitimately not exist yet.
+  if [ "$DRY_RUN" != "1" ]; then
+    dir="$(cd "$dir" 2>/dev/null && pwd)" ||
+      die "--bundle destination does not exist and could not be created: $1"
+  fi
 
   seen=''
   i=0
@@ -559,8 +702,18 @@ bundle_repos() {
     name="$base"
     attempt=1
     while :; do
+      # The taken-name test folds case, because the DESTINATION filesystem does.
+      # APFS is case-insensitive by default, so `Wiki` and `wiki` are one path: a
+      # case-sensitive test matched neither, both resolved to the same target, and the
+      # second `bundle create` silently overwrote the first repo's only backup while the
+      # tool printed "written and verified" twice and exited 0. Verified on this host
+      # (`touch Foo; ls foo` resolves) with ~/devpro/ea/Wiki beside ~/devpro/notes/wiki,
+      # an ordinary layout. It also stopped the "already holds every current ref" skip
+      # from ever matching, so every re-run flipped the survivor between the two repos.
+      # bash 3.2 has no ${name,,}, hence tr.
+      key="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
       case " $seen " in
-        *" $name "*) ;; # taken; fall through and try the next spelling
+        *" $key "*) ;; # taken; fall through and try the next spelling
         *) break ;;
       esac
       attempt=$((attempt + 1))
@@ -569,12 +722,23 @@ bundle_repos() {
         *) name="$base-$(printf '%s' "$repo" | shasum -a 256 | cut -c1-8)" ;;
       esac
     done
-    seen="$seen $name"
+    seen="$seen $key"
     target="$dir/$name.bundle"
 
     if [ -f "$target" ] && _bundle_is_current "$target" "$repo"; then
-      skip "$name.bundle -> already holds every current ref"
-      continue
+      # The skip path has to READ the file, not just compare its ref list. Re-running
+      # --bundle is the natural "is my backup still good?" check before erasing a
+      # machine, and matching refs say nothing about the pack behind them: a bundle
+      # corrupted after it was written (a bad copy onto the destination drive, a flaky
+      # enclosure, a half-synced cloud folder) still lists every ref. Without this the
+      # tool answered "already holds every current ref", exited 0, and the file could
+      # not be cloned.
+      if [ "$DRY_RUN" = "1" ] || _bundle_restores "$target"; then
+        skip "$name.bundle -> already holds every current ref"
+        continue
+      fi
+      warn "$name.bundle lists every current ref but does NOT unbundle, so it restores
+     nothing -- rewriting it"
     fi
 
     rc=0
@@ -592,12 +756,19 @@ bundle_repos() {
     # Refusing to claim success without verify is the point of this mode: an
     # interrupted or truncated bundle is a file of the right name and size that
     # restores nothing, and you find that out when the original is gone.
-    if out="$(git -C "$repo" bundle verify "$target" 2>&1)"; then
-      ok "$name.bundle written and verified"
-    else
+    if ! out="$(git -C "$repo" bundle verify "$target" 2>&1)"; then
       warn "$name.bundle does NOT verify -- treat it as no backup:
      $(printf '%s' "$out" | head -3)"
       BUNDLE_FAIL=$((BUNDLE_FAIL + 1))
+    elif ! _bundle_restores "$target"; then
+      # Two separate failures. `bundle verify` passing and the pack being unreadable is
+      # the dangerous combination, because it is the one that prints a green tick.
+      warn "$name.bundle passes 'bundle verify' but does NOT unbundle, so it restores
+     nothing -- treat it as no backup. verify reads only the header; the pack itself
+     is truncated or corrupt."
+      BUNDLE_FAIL=$((BUNDLE_FAIL + 1))
+    else
+      ok "$name.bundle written and verified"
     fi
   done
   return 0
@@ -657,22 +828,41 @@ print_gh_hint() {
   log "or capture them offline first: check-unpushed.sh --bundle <dir-on-another-disk>"
 }
 
+# _mode_once <mode> -- set MODE, refusing a SECOND mode flag.
+#
+# The arms below used to assign MODE unconditionally, so two mode flags collapsed to
+# whichever came last and the other was silently dropped -- and only one of them is a
+# gate. `--verify --bundle DIR`, the obvious "check and rescue in one pass", printed its
+# findings and then exited 0, because main()'s closing `case` has one arm per mode and
+# only consulted BUNDLE_FAIL. The reverse order, `--bundle DIR --verify`, silently
+# created no bundle and no destination directory at all. usage() has always documented
+# the three as alternatives, so this is unvalidated input at a trust boundary: refuse it
+# rather than pick one. Repeating the SAME flag is harmless and stays allowed.
+_mode_once() {
+  [ -z "$MODE_SET" ] || [ "$MODE_SET" = "$1" ] ||
+    die "--report, --verify and --bundle are mutually exclusive (got --$MODE_SET and
+     --$1). Run the tool twice: --bundle <dir> to capture, then --verify to gate."
+  MODE="$1"
+  MODE_SET="$1"
+}
+
 main() {
   local i repo
   MODE=report
+  MODE_SET=''
   BUNDLE_DIR=''
   while [ $# -gt 0 ]; do
     case "$1" in
-      --verify) MODE=verify ;;
-      --report) MODE=report ;;
+      --verify) _mode_once verify ;;
+      --report) _mode_once report ;;
       --bundle)
-        MODE=bundle
+        _mode_once bundle
         [ $# -ge 2 ] || die "--bundle needs a directory"
         BUNDLE_DIR="$2"
         shift
         ;;
       --bundle=*)
-        MODE=bundle
+        _mode_once bundle
         BUNDLE_DIR="${1#--bundle=}"
         [ -n "$BUNDLE_DIR" ] || die "--bundle needs a directory"
         ;;
@@ -698,9 +888,15 @@ main() {
     # building repos, a mistyped root, a symlinked root, a bad -maxdepth -- all produced
     # "nothing was checked" plus exit 0, i.e. the gate certifying a machine it never
     # looked at. --report still exits 0, because reporting is not gating.
-    [ "$MODE" != verify ] ||
-      die "scanned 0 repositories, so this is not a clean result -- it is no result.
+    # --bundle is held to the same standard: exiting 0 having written no bundle is how
+    # `check-unpushed.sh --bundle /Volumes/Backup && diskutil eraseDisk ...` erases a
+    # disk on the strength of a backup that was never made.
+    case "$MODE" in
+      verify | bundle)
+        die "scanned 0 repositories, so this is not a clean result -- it is no result.
      Check MACBOOT_REPO_ROOTS ($MACBOOT_REPO_ROOTS) and MACBOOT_REPO_DEPTH."
+        ;;
+    esac
     return 0
   fi
   ok "$REPO_N repos ($FOLDED extra checkout(s) of the same repository folded in)"
@@ -725,7 +921,7 @@ main() {
 
   BUNDLE_FAIL=0
   if [ "$MODE" = bundle ]; then
-    step "Bundling repos with no reachable origin into $BUNDLE_DIR"
+    step "Bundling repos with findings into $BUNDLE_DIR"
     bundle_repos "$BUNDLE_DIR"
   fi
 
@@ -744,6 +940,14 @@ main() {
     bundle)
       [ "$BUNDLE_FAIL" -eq 0 ] ||
         die "$BUNDLE_FAIL bundle(s) could not be verified; do not treat $BUNDLE_DIR as a backup"
+      # Same doctrine as verify, for the same reason. A bundle set built from a partial
+      # scan is not a backup of this disk, only of the part of it that happened to be
+      # readable -- and the two warnings that say so scroll past above a green closing
+      # box. Reproduced: one chmod-000 directory hiding a repo whose commit existed
+      # nowhere else, and `--bundle` still exited 0.
+      [ "$SCAN_ERRORS" -eq 0 ] ||
+        die "$SCAN_ERRORS root(s) could not be scanned completely (warnings above), so
+     $BUNDLE_DIR does not cover every repository on this disk."
       ;;
   esac
   return 0

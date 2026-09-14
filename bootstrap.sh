@@ -215,10 +215,19 @@ if [ ! -d "$STATE_DIR" ]; then
          sudo chown -R $(id -un) $MACBOOT_HOME/.macboot"
   fi
 fi
+# Scoped to the modules this invocation is actually going to run, not to the glob.
+# `--restart --only 40-node` -- both flags are documented, and reaching for the two
+# together is the obvious way to redo one module -- wiped all ten markers and then wrote
+# none, because mark_done returns early whenever --only is set. The next plain
+# ./bootstrap.sh therefore redid Homebrew, uv, nvm and the rest from the top: the hour of
+# downloads the marker system exists to avoid. RUN_LIST is already ALL minus --skip/--only
+# and, under --restart, is not filtered by the markers themselves, so with neither flag
+# present this is identical to wiping the glob. It also stops --restart --skip from
+# clearing the state of a module the user just asked to leave alone.
 if [ "$DO_RESTART" = 1 ]; then
-  for _f in "$STATE_DIR"/*.done; do
-    [ -f "$_f" ] || continue
-    run rm -f "$_f"
+  for _m in $RUN_LIST; do
+    [ -f "$STATE_DIR/$_m.done" ] || continue
+    run rm -f "$STATE_DIR/$_m.done"
   done
 fi
 
@@ -254,12 +263,35 @@ mark_done() {
 
 trap 'spin_stop; printf "\ninterrupted — finished modules are marked, re-run to resume\n" >&2; exit 130' INT
 
+# Where the tools macboot installs will be, resolved once. brew_prefix() shells out to
+# `brew --prefix` when brew already exists and otherwise answers from the arch, which is
+# the right answer for a fresh Mac that is about to get one.
+_MACBOOT_PREFIX="$(brew_prefix)"
+
 FAILED=''
 _i=0
 for _m in $RUN_LIST; do
   _i=$((_i + 1))
   export MACBOOT_STEP_N=$((_i - 1))
   log "$_i/$RUN_COUNT $_m"
+
+  # Modules are separate child processes, so a PATH fix a module makes inside its OWN
+  # process dies with it. 10-brew evals `brew shellenv`, which is why it can use brew
+  # itself -- but on a fresh Mac /opt/homebrew/bin is on no inherited PATH, so the next
+  # module could not. Measured in one `bootstrap.sh --dry-run --mytools` run:
+  # 80-mytools reported "witness -> needs go, which comes from 10-brew.sh" about the
+  # module that had just installed go, and 99-apps warned that its cask commands "cannot
+  # run until 10-brew.sh has finished". 30-python installs uv into ~/.local/bin with the
+  # same result for daylogs and trading-desk. Re-tested per iteration rather than once, so
+  # a directory that module N creates is on PATH for module N+1.
+  for _d in "$_MACBOOT_PREFIX/bin" "$_MACBOOT_PREFIX/sbin" "$MACBOOT_HOME/.local/bin"; do
+    [ -d "$_d" ] || continue
+    case ":$PATH:" in
+      *":$_d:"*) ;;
+      *) PATH="$_d:$PATH" ;;
+    esac
+  done
+  export PATH
 
   # `bash "$file"`, not `"$file"`: a checkout unzipped or copied off a FAT volume
   # loses the +x bit, and "permission denied" is a poor way to learn that.

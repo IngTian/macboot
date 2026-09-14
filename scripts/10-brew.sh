@@ -240,7 +240,15 @@ bundle() {
   # to prove it (measured 0.9s). Any other outcome -- unsatisfied, or a Homebrew
   # too old to have `bundle` built in -- falls through to the path below, which
   # needs no bundle subcommand at all.
-  if brew bundle check --file="$bf_file" >/dev/null 2>&1; then
+  #
+  # NOT in a dry run. `brew bundle` is Ruby and it materialises the signed JSON API
+  # payload plus a bootsnap cache into $HOME/Library/Caches/Homebrew: measured 904 paths
+  # and ~37 MB against a fresh HOME, plus one network fetch. `--dry-run` promises to write
+  # nothing, "not to any cache", and this is the same class of bug as the ssh probe that
+  # used to create ~/.ssh/known_hosts -- a read-only-looking question with a write side
+  # effect. The `brew list` path below answers the same question and measured 0 leftover
+  # paths, so a dry run simply takes it and reports "N present, none missing" instead.
+  if [ "$DRY_RUN" != "1" ] && brew bundle check --file="$bf_file" >/dev/null 2>&1; then
     skip "$bf_label -> all formulae satisfied"
     return 0
   fi
