@@ -40,7 +40,7 @@ jobs:
   lint:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # `brew list || brew install`: `brew install` on an already-present formula
       # is a slow no-op on a runner image that may ship shellcheck already.
       - name: install shellcheck and shfmt
@@ -67,7 +67,7 @@ jobs:
         tools: [absent, present]
     name: dry-run-purity (tools ${{ matrix.tools }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install the tools the modules probe for
         if: matrix.tools == 'present'
         run: |
@@ -86,7 +86,7 @@ jobs:
     # all, which is how "a targeted run permanently suppresses a module from make all"
     # shipped.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: marker and flag semantics
         env:
           MACBOOT_TEST_TMP: ${{ runner.temp }}
@@ -95,7 +95,7 @@ jobs:
   double-run:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: run the home-scoped modules twice; second pass must report changed=0
         env:
           MACBOOT_TEST_TMP: ${{ runner.temp }}
@@ -109,7 +109,7 @@ jobs:
     # only backup with another's. A tool that says "this disk is safe to wipe" has to be
     # tested on the ways it can be wrong, not the way it is right.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: fixture tests
         env:
           MACBOOT_TEST_TMP: ${{ runner.temp }}
@@ -118,7 +118,7 @@ jobs:
   unpushed-gate:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Fixture repos, not the checkout: the gate's job is to fail while work
       # exists in one place only, and the only way to test that is to build a repo
       # that is in exactly that state. Two roots, because one dirty repo under a
