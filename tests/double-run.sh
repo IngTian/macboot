@@ -182,9 +182,7 @@ snapshot() {
 do_pass() {
   _pass="$1"
   _total=0
-  _n=0
   for _mod in $MODULES; do
-    _n=$((_n + 1))
     _base="$(basename "$_mod")"
     _out="$SCRATCH/run$_pass.$_base.txt"
     _rc=0
@@ -220,7 +218,6 @@ do_pass() {
     fi
     _total=$((_total + _c))
     MODULE_CHANGED="$MODULE_CHANGED $_base=$_c"
-    progress "$_n" "$MODULE_N" "pass $_pass: $_base"
   done
   PASS_CHANGED="$_total"
 }

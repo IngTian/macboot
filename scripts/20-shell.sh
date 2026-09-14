@@ -96,7 +96,7 @@ account_shell() {
     s="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null |
       sed -n 's/^UserShell: *//p')"
   fi
-  # Linux CI has no dscl; getent, then $SHELL, then give up.
+  # A machine without dscl falls through: getent, then $SHELL, then give up.
   if [ -z "$s" ] && has getent; then
     s="$(getent passwd "$(id -un)" 2>/dev/null | awk -F: '{print $7}')"
   fi
@@ -230,7 +230,7 @@ EOF
 # bootstrap over that would be worse than the missing feature. Every one is guarded at
 # source time in the units too, so a missing file is inert, not broken.
 check_support_files() {
-  local prefix i total label formula p entry
+  local prefix label formula p entry
   local missing_labels='' missing_formulae=''
   prefix="$(brew_prefix)"
 
@@ -256,15 +256,11 @@ check_support_files() {
     "fzf key-bindings:fzf:$prefix/opt/fzf/shell/key-bindings.zsh" \
     "autojump:autojump:$prefix/etc/profile.d/autojump.sh"
 
-  total=$#
-  i=0
   for entry in "$@"; do
     label="${entry%%:*}"
     formula="${entry#*:}"
     formula="${formula%%:*}"
     p="${entry##*:}"
-    i=$((i + 1))
-    progress "$i" "$total" "$label"
     if [ ! -e "$p" ]; then
       missing_labels="$missing_labels $label"
       missing_formulae="$missing_formulae $formula"

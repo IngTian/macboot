@@ -11,11 +11,16 @@
 # 2. It installs formula by formula instead of handing the file to `brew bundle
 #    install`, because `brew bundle` cannot distinguish "absent" from "outdated"
 #    and its remedy for both is an upgrade. Measured on the source machine
-#    (Homebrew 7.0.1): `brew bundle check --file=Brewfile` calls 12 of the 18
-#    must-haves unsatisfied while only 7 are actually absent -- gh, fzf, tmux,
-#    htop and gnupg are installed and merely behind. `brew bundle install` would
-#    have upgraded all five. So `check` is used only as the fast all-satisfied
-#    path, and `brew list` decides what is genuinely missing.
+#    (Homebrew 7.0.1): `brew bundle check` reported MORE of this file unsatisfied
+#    than were actually absent -- gh, fzf, tmux, htop and gnupg were installed and
+#    merely behind, and `brew bundle install` would have upgraded all five. So
+#    `check` is used only as the fast all-satisfied path, and `brew list` decides
+#    what is genuinely missing.
+#
+#    No counts in that paragraph on purpose. It used to say "12 of the 17", which one
+#    Brewfile edit made wrong in three places; the corrected "18" was stale again within
+#    the hour, when `git` came out of the file. The RATIO is the finding and it is stable;
+#    the integers were decoration that needed maintaining.
 set -euo pipefail
 # SC1091 disabled alongside the source= directive: the path is computed, so plain
 # `shellcheck` cannot follow it and emits an info that still fails the exit
@@ -153,8 +158,8 @@ install_homebrew() {
 
 # .zprofile, not .zshrc: zsh reads .zshrc only for interactive shells, so a
 # LaunchAgent or a git hook would get a PATH without Homebrew on it. The prefix
-# is resolved by brew_prefix (/opt/homebrew on Apple Silicon, /usr/local on
-# Intel) because a hardcoded one silently breaks the other arch.
+# still comes from brew_prefix rather than a literal, because that is the one place
+# that asks `brew --prefix` and so gets a non-default prefix right.
 ensure_shellenv() {
   bh_prefix="$(brew_prefix)"
   # The -x guard keeps a profile that outlives Homebrew from erroring on every
@@ -287,15 +292,21 @@ bundle() {
   bf_done=0
   bf_failed=''
   for bf_name in $bf_missing; do
+    bf_done=$((bf_done + 1))
+    # Announced BEFORE the install, not tallied after it. This is the one loop in macboot
+    # where progress is a real question -- each formula is seconds to minutes of someone
+    # else's build output -- and the useful answer is which one is running now and how many
+    # are left. A bar drawn afterwards told you what had already finished, which you could
+    # already see, and it was the same 24 glyphs whether N was 4 or 27.
+    #
+    # Live runs only. In a dry run the `run` below already prints one
+    # "would brew install --formula <name>" per formula, so this would both duplicate that
+    # list and claim to be "installing" something during a run that installs nothing.
+    [ "$DRY_RUN" = "1" ] || log "[$bf_done/$bf_n] installing $bf_name"
     # --formula so a name that is also a cask token can never resolve to the GUI
     # app. Brew's own output stays visible: when a build fails, the log path it
     # prints is the only thing that helps.
     run brew install --formula "$bf_name" || bf_failed="$bf_failed $bf_name"
-    bf_done=$((bf_done + 1))
-    # Drawn after each install so the bar lands below brew's own output instead
-    # of being overwritten by it. Suppressed for a single formula, where a 100%
-    # bar says less than the line above it.
-    [ "$bf_n" -gt 1 ] && progress "$bf_done" "$bf_n" "$bf_name"
   done
 
   if [ -n "$bf_failed" ]; then

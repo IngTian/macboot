@@ -173,7 +173,6 @@ main() {
   rows=''
   missing_n=0
   missing_cmds=''
-  i=0
   # Split each line by hand instead of `IFS=<tab> read -r name tier hint note`.
   # Tab counts as IFS *whitespace* no matter what IFS is set to, so read collapses
   # two adjacent tabs into one delimiter: measured on a row with an empty
@@ -193,8 +192,6 @@ main() {
     rest="${rest#*"$TAB"}"
     hint="${rest%%"$TAB"*}"
     note="${rest#*"$TAB"}"
-    i=$((i + 1))
-    progress "$i" "$total" "$name"
 
     token="$(cask_token "$hint")"
     if where="$(found_where "$name" "$token")"; then

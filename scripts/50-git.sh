@@ -19,9 +19,10 @@ set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-# No require_macos: this module only writes under $MACBOOT_HOME/.config, so its
-# dry-run stays exercisable on the Linux CI runner, where defaults(1) and
-# therefore 60-macos.sh cannot run at all.
+# No require_macos: this module writes only under $MACBOOT_HOME/.config and shells out to
+# git, so there is nothing macOS-specific to refuse over. An earlier version of this comment
+# credited "the Linux CI runner" -- all four CI jobs run on macos-latest and always have, so
+# that was never the reason.
 
 #: The identity shipped in git/gitconfig. Compared against the EFFECTIVE identity
 #: rather than grepped out of the file, so it is still detected when it arrives

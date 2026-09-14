@@ -23,8 +23,8 @@ set -euo pipefail
 # shellcheck source=lib/common.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-# No require_macos: like 50-git.sh this touches nothing macOS-specific, so its dry run
-# stays exercisable on a Linux CI runner.
+# No require_macos: like 50-git.sh this touches nothing macOS-specific. (Not, as 50-git's
+# comment used to claim, for a Linux CI runner -- there has never been one.)
 
 usage() {
   cat <<'EOF'

@@ -139,8 +139,13 @@ asserting on the *filesystem* rather than on the transcript.
 
 ## Requirements
 
-macOS on Apple Silicon or Intel (Homebrew's prefix is detected, not hardcoded), the Xcode
-Command Line Tools, and `/bin/bash`. The scripts are bash 3.2 compatible because that is
-what a fresh Mac ships and this runs before Homebrew exists.
+**Apple Silicon only** — `00-preflight.sh` refuses anything else, because `/opt/homebrew`
+is hardcoded rather than detected. **Current macOS**, with no accommodations for older
+versions — which is why `git` and `jq` are absent from the `Brewfile`: macOS ships both, and
+brew's are one minor version ahead of Apple's.
+
+Plus the Xcode Command Line Tools, which are a hard prerequisite (preflight dies without
+them), and `/bin/bash` — the scripts are bash 3.2 compatible because that is what a fresh
+Mac ships and this runs before Homebrew exists.
 
 MIT — see [LICENSE](LICENSE).

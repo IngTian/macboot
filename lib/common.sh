@@ -34,7 +34,7 @@ DRY_RUN="${DRY_RUN:-0}"
 #: bootstrap.sh, which runs modules as CHILD processes and therefore cannot see their
 #: MACBOOT_* counters. Without it the closing line said "0 warnings" directly after five
 #: warnings had scrolled past. A file rather than a pipe: piping a module's output costs
-#: it the tty, and with it the colour, the spinner and the progress bar. Empty when a
+#: it the tty, and with it the colour and the spinner. Empty when a
 #: module is run on its own, and deliberately NOT under $MACBOOT_HOME -- a dry run must
 #: leave that untouched.
 MACBOOT_TALLY="${MACBOOT_TALLY:-}"
@@ -85,16 +85,18 @@ MACBOOT_WARNED=0
 # can pipe stdout without swallowing the narration.
 # ---------------------------------------------------------------------------
 
-# _tty -- is stderr a terminal? Every decorative feature checks this, because a
-# spinner or a redrawn progress bar written into a CI log or a pipe produces
-# thousands of lines of escape-code noise and hides the one line that mattered.
+# _tty -- is stderr a terminal? The spinner checks this: a redrawn spinner written into a
+# CI log or a pipe produces thousands of lines of escape-code noise and hides the one line
+# that mattered.
 _tty() { [ -t 2 ]; }
 
-# Glyphs degrade to ASCII when the locale cannot promise UTF-8. A mojibake tick in
-# the middle of an install log reads as corruption and makes people distrust the run.
+# Glyphs degrade to ASCII when the locale cannot promise UTF-8, and this genuinely changes
+# the bytes written: LC_ALL=C emits `> arrow / ok check / -- dot` where a UTF-8 locale emits
+# `▸ ✓ ·`, verified with od -c. Only the three that have readers are here -- '✗' was
+# assigned for years with no reader at all, and the two block glyphs died with the bar.
 case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
-  *UTF-8* | *utf8* | *UTF8*) _G_OK='✓' _G_NO='✗' _G_SKIP='·' _G_ARROW='▸' _G_BAR='█' _G_BAR_BG='░' ;;
-  *) _G_OK='ok' _G_NO='XX' _G_SKIP='--' _G_ARROW='>' _G_BAR='#' _G_BAR_BG='.' ;;
+  *UTF-8* | *utf8* | *UTF8*) _G_OK='✓' _G_SKIP='·' _G_ARROW='▸' ;;
+  *) _G_OK='ok' _G_SKIP='--' _G_ARROW='>' ;;
 esac
 
 log() { printf '%s%s%s %s\n' "$_C_BLUE" "$_G_ARROW" "$_C_RESET" "$*" >&2; }
@@ -141,10 +143,14 @@ _STEP_LABEL=''
 # scrollback needs to know whether what follows actually happened.
 #
 # Pure ASCII, and that is the point rather than the joke: the box-drawing header this
-# replaces hardcoded U+250C/2500/2502/2514 with no locale check, so under LC_ALL=C it
-# rendered as mojibake -- the exact failure the glyph table above exists to prevent, in
-# the very first thing the tool prints. ASCII art needs no second code path, so there is
-# nothing here to fall out of sync. 51 columns at its widest.
+# replaces hardcoded U+250C/2500/2502/2514 and so BYPASSED the glyph table above -- the one
+# mechanism in this file for not emitting multi-byte glyphs when the locale does not promise
+# UTF-8, ignored by the very first thing the tool prints. (An earlier version of this comment
+# said it "rendered as mojibake". That was never measured: printf writes the same bytes
+# either way and whether they render is the terminal's business. Bypassing the mechanism is
+# the defect; what a given terminal then did with it is not knowable from here.)
+# ASCII art needs no second code path, so there is nothing here to fall out of sync.
+# 51 columns at its widest.
 banner() {
   local mode
   mode='live'
@@ -181,61 +187,6 @@ step_end() {
   elapsed=$(($(date +%s) - _STEP_STARTED_AT))
   [ "$elapsed" -ge 2 ] && printf '  %s%ss%s\n' "$_C_DIM" "$elapsed" "$_C_RESET" >&2
   _STEP_LABEL=''
-}
-
-# progress <done> <total> [label] -- a single redrawn bar for a list of known length.
-# Falls back to one line per 25% when not a terminal, so a CI log gets progress
-# without 400 carriage-returned copies of the same line.
-#
-# EVERY variable here is `local`, and that is load-bearing rather than tidiness.
-# bash has dynamic scope: an unscoped `i` in this function assigns straight into the
-# `local i` of whatever loop is calling it, so a caller written the obvious way --
-#
-#   local i=0; for row in ...; do i=$((i+1)); progress "$i" "$total"; done
-#
-# -- has its counter overwritten by the bar-drawing loop and never advances. It was
-# not a hypothetical: 99-apps.sh and 20-shell.sh both did exactly that, and a
-# seven-row table rendered percentages up to 169971% and 507 KB of block glyphs,
-# because `filled=$((pct*width/100))` appends one glyph per unit of an unbounded
-# percentage. It is invisible in CI because the non-TTY branch above returns before
-# the loop, which is why lint and the double-run test both passed.
-progress() {
-  local cur="$1" tot="$2" label="${3:-}"
-  local pct width filled bar i bucket prev
-  [ "$tot" -gt 0 ] || return 0
-  pct=$((cur * 100 / tot))
-  if ! _tty; then
-    # Print when a quarter is CROSSED, not when pct lands exactly on 25/50/75/100.
-    # Equality almost never holds: seven rows step 14,28,42,57,71,85,100, so the
-    # exact-match version emitted a single line for the whole table and the "CI logs
-    # still get progress" promise was not kept for any total that is not a factor
-    # of 100. Stateless by design (no counter to reset between callers), so the
-    # previous bucket is recomputed from cur-1.
-    bucket=$((pct / 25))
-    prev=$(((cur - 1) * 100 / tot / 25))
-    [ "$bucket" -ne "$prev" ] && printf '  %s%% %s\n' "$pct" "$label" >&2
-    return 0
-  fi
-  # Clamp: a caller whose denominator drifts from its loop (a comment row counted
-  # once and iterated twice) must get a wrong-but-bounded bar, not a screenful.
-  [ "$pct" -gt 100 ] && pct=100
-  [ "$pct" -lt 0 ] && pct=0
-  width=24
-  filled=$((pct * width / 100))
-  bar=''
-  i=0
-  while [ "$i" -lt "$filled" ]; do
-    bar="$bar$_G_BAR"
-    i=$((i + 1))
-  done
-  while [ "$i" -lt "$width" ]; do
-    bar="$bar$_G_BAR_BG"
-    i=$((i + 1))
-  done
-  printf '\r  %s%s%s %3d%% %s%-28.28s%s' \
-    "$_C_GREEN" "$bar" "$_C_RESET" "$pct" "$_C_DIM" "$label" "$_C_RESET" >&2
-  [ "$cur" -ge "$tot" ] && printf '\n' >&2
-  return 0
 }
 
 # spin_start <label> / spin_stop -- an indeterminate spinner for one long opaque
@@ -578,17 +529,18 @@ is_managed() {
   profiles status -type enrollment 2>/dev/null | grep -qi 'Enrolled via DEP: Yes\|MDM enrollment: Yes'
 }
 
-# brew_prefix -- Homebrew's prefix on this arch, without assuming it is installed.
-# Apple Silicon is /opt/homebrew, Intel /usr/local; hardcoding either breaks one.
+# brew_prefix -- Homebrew's prefix, without assuming it is installed yet.
+#
+# Two branches, not four. This repo targets Apple Silicon only (00-preflight.sh refuses
+# anything else), where Homebrew's prefix is /opt/homebrew, so the /usr/local branch and
+# the `uname -m` fallback that chose between them are gone. `brew --prefix` is still asked
+# first rather than assumed: it costs one subprocess and it is the only thing that gets a
+# non-default prefix right.
 brew_prefix() {
   if has brew; then
     brew --prefix
-  elif [ -x /opt/homebrew/bin/brew ]; then
-    echo /opt/homebrew
-  elif [ -x /usr/local/bin/brew ]; then
-    echo /usr/local
   else
-    case "$(uname -m)" in arm64) echo /opt/homebrew ;; *) echo /usr/local ;; esac
+    echo /opt/homebrew
   fi
 }
 
