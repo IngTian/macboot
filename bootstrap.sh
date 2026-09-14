@@ -239,11 +239,10 @@ export MACBOOT_STEP_TOTAL="$RUN_COUNT"
 # mark_done <module> -- record that a module finished, when that means anything.
 #
 # A TARGETED run does not complete a step of the full bootstrap, so it writes no
-# marker. Doing so was a quiet trap: `make check` (--only 05) marked the unpushed-work
-# gate done, so every later `make all` proceeded WITHOUT the gate on a machine with no
-# backup; `make apps` (--only 99) marked 99 done, so the real bootstrap never printed
-# the GUI-app list; `make module M=40-node` marked node done. Recovery needed
-# --restart, which is documented for the resume case and nowhere near those targets.
+# marker. Doing so was a quiet trap: `make apps` (--only 99) marked 99 done, so the real
+# bootstrap never printed the GUI-app list; `make mytools` (--only 80) marked 80 done;
+# `make module M=40-node` marked node done. Recovery needed --restart, which is
+# documented for the resume case and nowhere near those targets.
 mark_done() {
   if [ -n "$ONLY" ]; then
     return 0

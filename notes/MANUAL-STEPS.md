@@ -184,10 +184,11 @@ built for while four repos held commits that existed in exactly one place, and a
 worktree under `/private/tmp` had already been deleted by macOS's own tmp cleanup,
 taking its commits with it. That is what a suppressible warning costs.
 
-`check-unpushed.sh` is not a substitute. All it verifies is that git *commits* exist
-on some remote. It says nothing about anything that is not in a git repo — not your
-photos, not `~/Downloads`, not the licence keys from step 4 — and a clean
-`check-unpushed.sh --verify` is not a backup.
+Nothing in macboot is a substitute for setting one up. It has no view of your data at
+all: not your photos, not `~/Downloads`, not the licence keys from step 4, not whether
+your git commits exist anywhere but this disk. The warning is the entirety of what it
+does about backups, on purpose — enrolling a disk in Time Machine can erase it, so that
+choice stays yours.
 
 ## Rust, if you ever need it
 

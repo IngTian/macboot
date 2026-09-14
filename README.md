@@ -39,10 +39,9 @@ DRY_RUN=1 bash scripts/40-node.sh
 bash scripts/40-node.sh
 ```
 
-Nothing in the bootstrap inspects your repositories or refuses to proceed because of
-them. If you are *retiring* a Mac rather than setting one up, that is a different job
-and a separate tool — [`check-unpushed.sh`](#migrating-off-a-mac-check-unpushedsh),
-below.
+Nothing here inspects your repositories, and nothing refuses to proceed because of
+them. macboot sets up a new Mac; retiring an old one is a different job and not this
+tool's.
 
 ## Automated / listed / manual
 
@@ -144,67 +143,6 @@ detects that you have no access, says so, and does not fail the run.
 
 **Listed only** — `apps.tsv`, printed by `make apps`. See the table above.
 
-## Migrating off a Mac: `check-unpushed.sh`
-
-`check-unpushed.sh` is for **migrating off** a Mac, not for setting one up. It is not
-a bootstrap step and nothing in `scripts/` calls it: a fresh machine has no
-repositories to check, and a published bootstrap that refuses to proceed because a
-stranger has an unpushed commit is a hostile default. Run it yourself, before you
-wipe anything:
-
-```sh
-make check                      # human report, always exits 0
-bash check-unpushed.sh --verify # exits non-zero while anything is at risk
-bash check-unpushed.sh --bundle /Volumes/somewhere-else
-```
-
-`--verify` exits non-zero if **any** of these is true of **any** repo it finds:
-
-- `origin` does not resolve — it is contacted, not read out of `.git/config`
-- `git stash list` is not empty
-- a local branch has no upstream, or is ahead of it, or its upstream is gone
-- `HEAD` is detached at a commit no remote branch contains
-- a tag points at a commit no remote branch contains
-- a tracked file is modified — in the checkout **or in any linked worktree**
-- …or it could not scan everything it was pointed at
-
-That last one matters as much as the rest. "I found nothing" and "I could not look"
-used to share an exit code, so a mistyped root, a symlinked root or a bad
-`MACBOOT_REPO_DEPTH` all reported *nothing to lose* about a tree it had never opened.
-A green result now means it looked everywhere.
-
-The finding list is not arbitrary. Three facts about git are the whole reason:
-
-**A stash is not a commit.** It is a dangling commit held by one reflog entry under
-`refs/stash`. `git push` will never send it, no branch contains it, and nothing
-outside that reflog remembers it exists. On the disk this repo was written for, two
-stashes carried the *only* remaining record of branches that existed nowhere else —
-delete the repo and the work is not "unpushed", it is gone. So an empty stash list
-is a precondition, not a nicety.
-
-**A configured remote can be deleted without git noticing.** `origin` is a URL in
-`.git/config`, and everything under `refs/remotes/origin/` is a local cache of the
-last time you talked to it. Delete the repository on the server and nothing local
-changes: `git status` still says *up to date with 'origin/main'*, `git branch -vv`
-still prints an upstream, and you find out at the next push — which, if you were
-about to reclaim disk space, is after. One repo here holds 189 commits whose remote
-no longer exists and looks perfectly safe by every local signal. That is why the
-check does a live lookup against the remote instead of believing the config.
-
-**`git push` does not carry tags, and a detached HEAD is on no branch at all.** Both
-are commits reachable from nothing a branch-based check looks at. Running this against
-the machine it was written for, that is not theoretical either: it found 9 unpushed
-`archive/*` tags in one repo and 4 release tags in another.
-
-I wrote it because a worktree on that machine was already lost to `/private/tmp`
-cleanup, taking commits that existed in exactly one place. This is not a
-hypothetical failure mode; it is a repeat of one — and the tool still reports that
-dangling registration today, along with an uncommitted edit in a linked worktree that
-`git status` in the main checkout says nothing about.
-
-On a genuinely fresh machine you will never run this. That is the point of it not
-being a bootstrap step.
-
 ## `make help`
 
 Generated from the real target list, not written by hand:
@@ -225,8 +163,7 @@ Tiers
   mytools        build my own tools; skips the private one
   apps           print the GUI apps that are missing, with paste-ready commands
 
-Gates and quality
-  check          migrating off a Mac? non-zero while any commit exists only on this disk
+Quality
   lint           shellcheck + shfmt -d over every shell file in the tree
   fmt            rewrite every script with shfmt (the plan equivalent is `lint`)
   test           lint, bash -n, then the real tests: purity, bootstrap flow, idempotency
@@ -252,9 +189,10 @@ Every target is safe to re-run, and every target that changes the machine has a
   It will not strip a management profile: removing one violates the policy you
   agreed to, and Jamf reinstalls it anyway. Expect some `defaults` to be silently
   reverted on a managed machine — that is the MDM working, not macboot failing.
-- **Not a backup tool.** `check-unpushed.sh` verifies that git commits exist
-  somewhere other than this laptop. That is the entirety of its claim. It does not
-  copy your photos, and a clean run of it is not a backup.
+- **Not a backup tool, and not a migration tool.** macboot sets up a new Mac. It does
+  not check, move, clean up or reason about anything on an old one — `00-preflight.sh`
+  warns when `tmutil` reports no backup destination and that is the whole of its
+  interest in the subject.
 - **No personal layer.** No private overlay repo, no dotfiles submodule, no
   machine-specific branch. My personal setup stays manual on purpose, which is also
   why `memory/` is in `.gitignore` — that is structural, so that personal content

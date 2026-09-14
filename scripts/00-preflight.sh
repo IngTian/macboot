@@ -130,10 +130,9 @@ report_mdm() {
 
 # Backup state. This warns on EVERY run by design (spec: "00-preflight.sh warns
 # on every run when tmutil reports no backup destination") -- the audited machine
-# has neither a destination nor a local snapshot, and four repos hold commits
-# that exist in exactly one place. Configure nothing: choosing a backup
-# destination is the owner's decision, and a script that silently enrolls a disk
-# in Time Machine can erase it.
+# had neither a destination nor a local snapshot. Configure nothing: choosing a
+# backup destination is the owner's decision, and a script that silently enrolls a
+# disk in Time Machine can erase it.
 report_backup() {
   local dest snaps
   # Measured: `tmutil destinationinfo` exits 0 even when it prints
@@ -150,14 +149,16 @@ report_backup() {
         warn "no Time Machine destination; only $snaps local APFS snapshot(s) exist.
      Local snapshots live on the same disk that would fail. This is not a backup."
       else
-        # Names the tool that actually ships. `rescue.sh` was this file's earlier
-        # name and does not exist, so the single most urgent piece of advice the
-        # module gives pointed at a file the user cannot run.
+        # Points at a file that ships, and names the HEADING rather than a step number.
+        # This one warning has already pointed at two things the user could not act on:
+        # `rescue.sh`, a rename this module never followed, and then a retirement
+        # checker later removed from the repo. A number would rot the same way -- the
+        # backup step is 9 of 9 today and any insertion above it moves it -- so it is
+        # named by its title, which is greppable and survives a reorder.
         warn "NO BACKUP OF ANY KIND: no Time Machine destination, no local APFS
-     snapshots. Anything this bootstrap moves or replaces is unrecoverable, and
-     unpushed commits are one disk fault from gone. If you are migrating off this
-     machine rather than setting up a new one, run this first:
-         bash $MACBOOT_ROOT/check-unpushed.sh --report"
+     snapshots. Anything this bootstrap moves or replaces is unrecoverable. See
+     \"Set up a backup\" in $MACBOOT_ROOT/notes/MANUAL-STEPS.md -- macboot will not do
+     it for you: enrolling a disk in Time Machine can erase it, so that choice is yours."
       fi
       ;;
     *)

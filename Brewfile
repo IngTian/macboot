@@ -14,7 +14,7 @@
 # (being retired). See the spec's decision table.
 
 brew "git"                 # macOS ships git 2.39 behind the Xcode CLT; needs to be current
-brew "gh"                  # `gh auth` is how the rescue phase re-establishes the missing origins
+brew "gh"                  # 80-mytools.sh probes the private repo with it; `gh auth setup-git` is how git gets a credential
 brew "zsh-autosuggestions" # 20-shell.sh sources it from $(brew --prefix)/share
 brew "zsh-completions"     # ditto; must exist before the .zshrc fpath line points at it
 brew "fzf"                 # Ctrl-R history search that 20-shell.sh wires up

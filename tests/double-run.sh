@@ -21,9 +21,6 @@
 #                        real user's preferences. Never in an automated test.
 #   * 70-claude          runs `claude plugin ...` against a live marketplace.
 #   * 80-mytools         clones and builds from the network.
-#   (check-unpushed.sh is not in scripts/ at all -- it is a standalone migration tool,
-#    not a bootstrap step, so it is neither run nor excluded here. It has its own CI
-#    job with fixture repos.)
 #   * anything that changes the login shell (chsh) -- interactive password prompt.
 #
 # So `defaults` idempotency and Homebrew idempotency are NOT covered here, by
