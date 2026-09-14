@@ -158,9 +158,10 @@ problem explicitly rather than leaving you to notice it at the worst moment.
 
 What you have to do yourself, before you need it:
 
-- Enumerate the keys that gate something you cannot re-create. On the machine this
-  repo was written for that is three, gating two GitLab hosts, GitHub, and a peer
-  machine over SSH.
+- Enumerate the keys that gate something you cannot re-create. `ls ~/.ssh/*.pub` is
+  the start of the list; `~/.ssh/config` usually finishes it. (This repo is public, so
+  it does not print its author's answer — an inventory of which hosts your keys open
+  is not something to publish, and it is not needed to follow the instruction.)
 - Decide where the second copy lives: a password manager with a secure-note or file
   attachment, or a hardware token, or — at absolute minimum — **one more copy
   somewhere that is not this laptop.** An encrypted archive on a USB stick in a
@@ -178,16 +179,15 @@ Turn on Time Machine, or something equivalent, and point it at a destination tha
 is not the internal disk.
 
 **Why it warns on every run.** `00-preflight.sh` runs `tmutil destinationinfo`, and
-when it reports *"No destinations configured"* it warns — every single run, with no
-way to silence it. That is deliberate. It was true on the machine this repo was
-built for while four repos held commits that existed in exactly one place, and a
-worktree under `/private/tmp` had already been deleted by macOS's own tmp cleanup,
-taking its commits with it. That is what a suppressible warning costs.
+when it reports *"No destinations configured"* it warns — every single run, with no way
+to silence it. That is deliberate: it is the one warning where the cost of being right
+once outweighs the cost of being repetitive every time.
 
-`check-unpushed.sh` is not a substitute. All it verifies is that git *commits* exist
-on some remote. It says nothing about anything that is not in a git repo — not your
-photos, not `~/Downloads`, not the licence keys from step 4 — and a clean
-`check-unpushed.sh --verify` is not a backup.
+Nothing in macboot is a substitute for setting one up. It has no view of your data at
+all: not your photos, not `~/Downloads`, not the licence keys from step 4, not whether
+your git commits exist anywhere but this disk. The warning is the entirety of what it
+does about backups, on purpose — enrolling a disk in Time Machine can erase it, so that
+choice stays yours.
 
 ## Rust, if you ever need it
 

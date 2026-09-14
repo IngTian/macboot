@@ -30,7 +30,16 @@ MACBOOT_COMMON_SOURCED=1
 #: 1 = print what would happen and change nothing. Set by --dry-run.
 DRY_RUN="${DRY_RUN:-0}"
 
-#: 1 = suppress the colour codes (also auto-off when stdout is not a tty).
+#: Scratch file where a module reports its counters and its warning text back to
+#: bootstrap.sh, which runs modules as CHILD processes and therefore cannot see their
+#: MACBOOT_* counters. Without it the closing line said "0 warnings" directly after five
+#: warnings had scrolled past. A file rather than a pipe: piping a module's output costs
+#: it the tty, and with it the colour, the spinner and the progress bar. Empty when a
+#: module is run on its own, and deliberately NOT under $MACBOOT_HOME -- a dry run must
+#: leave that untouched.
+MACBOOT_TALLY="${MACBOOT_TALLY:-}"
+
+#: 1 = suppress the colour codes (also auto-off when stderr is not a tty).
 NO_COLOR="${NO_COLOR:-0}"
 
 #: Where this checkout lives. Modules use it to find Brewfile, apps.tsv, etc.
@@ -43,7 +52,13 @@ MACBOOT_HOME="${MACBOOT_HOME:-$HOME}"
 #: together instead of scattering across seconds.
 MACBOOT_STAMP="${MACBOOT_STAMP:-$(date +%Y%m%d-%H%M%S)}"
 
-if [ -t 1 ] && [ "$NO_COLOR" != "1" ]; then
+# Gated on stderr, not stdout, because that is where every coloured write in this repo
+# goes: `grep -rn '_C_' lib scripts bootstrap.sh` is all `>&2`. With `[ -t 1 ]` a run
+# redirected as `./bootstrap.sh 2>run.log` still saw a terminal on the bare stdout side
+# and wrote escape codes into the log, while `./bootstrap.sh >out.txt` stripped the colour
+# from a transcript still going to the screen -- exactly backwards in both directions.
+# One test here fixes log, ok, skip, warn, step, step_end, die, banner and summary at once.
+if [ -t 2 ] && [ "$NO_COLOR" != "1" ]; then
   _C_RESET=$'\033[0m'
   _C_DIM=$'\033[2m'
   _C_RED=$'\033[31m'
@@ -91,6 +106,12 @@ skip() {
 warn() {
   MACBOOT_WARNED=$((MACBOOT_WARNED + 1))
   printf '  %s!%s %s\n' "$_C_YELLOW" "$_C_RESET" "$*" >&2
+  # Kept for the closing replay. Warnings are the only output a user must act on, and in
+  # a ten-module run they are hundreds of lines above the last screen. The `return 0` is
+  # load-bearing: without it a failed append makes warn() the last command of a `&&`
+  # chain under `set -e` and kills the caller.
+  [ -n "$MACBOOT_TALLY" ] && printf 'W %s\n' "$*" >>"$MACBOOT_TALLY.warn"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -99,34 +120,49 @@ warn() {
 # captures stays greppable.
 # ---------------------------------------------------------------------------
 
-#: Total number of steps, set once by bootstrap.sh so `step` can render "[3/9]".
+#: The running module's position in the run, and how many modules are in it. Both come
+#: from bootstrap.sh's environment: modules are child processes that re-source this file,
+#: so `step` cannot keep a counter of its own.
+#:
+#: MACBOOT_STEP_N is the MODULE index, NOT a step count, and the distinction is the whole
+#: bug this pair has had twice. A module's step count is unknown before it runs, so
+#: counting steps against a module total made the numerator and the denominator different
+#: units: a full run rendered [1/10] [2/10] [2/10] [3/10] [3/10] [4/10] [5/10] [4/10] ...
+#: -- 21 renders for 10 modules, going backwards at 5->4 and reaching [12/10] inside
+#: 80-mytools, while 99-apps (which calls step zero times) meant [10/10] never printed at
+#: all. An earlier comment here claimed that exact class of bug was already fixed, which
+#: made it a false all-clear over live wrong output.
 MACBOOT_STEP_TOTAL="${MACBOOT_STEP_TOTAL:-0}"
-
-#: Steps already completed by EARLIER modules. Inherited, not reset: bootstrap.sh
-#: runs each module as a child process that re-sources this file, so hardcoding 0
-#: here made its `export MACBOOT_STEP_N=<offset>` dead code and every module
-#: restarted the count -- module 6 of 11 rendered "[1/11]", and a reader at "[4/11]"
-#: was really six modules in, with numerator and denominator counting different
-#: things.
 MACBOOT_STEP_N="${MACBOOT_STEP_N:-0}"
 _STEP_STARTED_AT=0
 _STEP_LABEL=''
 
 # banner -- the one-time header. Prints the mode, because someone reading a
 # scrollback needs to know whether what follows actually happened.
+#
+# Pure ASCII, and that is the point rather than the joke: the box-drawing header this
+# replaces hardcoded U+250C/2500/2502/2514 with no locale check, so under LC_ALL=C it
+# rendered as mojibake -- the exact failure the glyph table above exists to prevent, in
+# the very first thing the tool prints. ASCII art needs no second code path, so there is
+# nothing here to fall out of sync. 51 columns at its widest.
 banner() {
   local mode
   mode='live'
-  [ "$DRY_RUN" = "1" ] && mode='dry run — nothing will be changed'
-  printf '\n%s┌─ macboot ─────────────────────────────────────────────%s\n' "$_C_BLUE" "$_C_RESET" >&2
-  printf '%s│%s  %s\n' "$_C_BLUE" "$_C_RESET" "$mode" >&2
-  printf '%s└───────────────────────────────────────────────────────%s\n\n' "$_C_BLUE" "$_C_RESET" >&2
+  [ "$DRY_RUN" = "1" ] && mode='dry run - nothing will be changed'
+  printf '\n%s   ^__^%s          macboot\n' "$_C_BLUE" "$_C_RESET" >&2
+  printf '%s   (oo)\\_______%s   %s%s%s\n' "$_C_BLUE" "$_C_RESET" "$_C_DIM" "$mode" "$_C_RESET" >&2
+  printf '%s   (__)\\       )\\/\\%s\n' "$_C_BLUE" "$_C_RESET" >&2
+  printf '%s       ||----w ||%s\n\n' "$_C_BLUE" "$_C_RESET" >&2
 }
 
-# step <label> -- begin a numbered step. Closes the previous one's timing.
+# step <label> -- begin a step of the current module. Closes the previous one's timing.
+#
+# The "[n/total]" prefix is not decoration: tests/dry-run-purity.sh flags any column-0
+# line whose first word is a mutating verb, and labels like "nvm v0.40.1" and
+# "uv (vendor installer, not Homebrew)" clear that scan only because of the prefix.
+# No increment here -- the number is the module's position, which bootstrap.sh owns.
 step() {
   [ -n "$_STEP_LABEL" ] && step_end
-  MACBOOT_STEP_N=$((MACBOOT_STEP_N + 1))
   _STEP_LABEL="$1"
   _STEP_STARTED_AT=$(date +%s)
   if [ "$MACBOOT_STEP_TOTAL" -gt 0 ]; then
@@ -239,7 +275,22 @@ spin_stop() {
 
 # Kill the spinner on any exit path. Without this, an interrupted run leaves a
 # background process spinning forever on a shell the user has already left.
-trap 'spin_stop' EXIT INT TERM
+#
+# INT and TERM RE-RAISE the signal after cleaning up; they used to share the EXIT
+# handler, and a bash trap handler that simply returns does NOT terminate the script.
+# So Ctrl-C was swallowed outright: the module resumed at the next command and ran every
+# remaining mutation to completion. Measured through a real pty -- ^C at mutation 3 of 12
+# left all 12 on disk, and stripping this one line made the same run stop at 3. On a real
+# Mac that meant Ctrl-C during 60-macos.sh still applied the remaining `defaults` writes
+# and Ctrl-C during 20-shell.sh still finished rewriting .zshrc, after the user had
+# decided to stop ("wrong machine", "I meant --dry-run"), with bootstrap.sh printing
+# "interrupted" only once the child had already done everything. It also meant mark_done
+# was never reached, so a module that fully succeeded re-ran anyway -- the opposite of
+# what that message promises. Resetting to the default disposition before re-raising is
+# what makes the shell die FROM the signal instead of recursing into this handler.
+trap 'spin_stop' EXIT
+trap 'spin_stop; trap - INT; kill -INT $$' INT
+trap 'spin_stop; trap - TERM; kill -TERM $$' TERM
 
 # die() exits non-zero. Modules should die on "the machine is not in a state I can
 # safely change" and warn on "this one optional thing is unavailable" -- a bootstrap
@@ -276,6 +327,56 @@ run() {
 
 # has <command> -- is it on PATH? Read-only, so it never goes through run().
 has() { command -v "$1" >/dev/null 2>&1; }
+
+# ---------------------------------------------------------------------------
+# Asking the human. Both helpers below return WITHOUT asking in every
+# non-interactive path, so a caller must still be correct when nobody was asked.
+# ---------------------------------------------------------------------------
+
+#: 1 = never stop to ask; take the documented default for every question. Set by --yes.
+#: Defaulted here as well as in bootstrap.sh because a module is runnable on its own, and
+#: under `set -u` an unset variable in ask() would abort it.
+MACBOOT_YES="${MACBOOT_YES:-0}"
+
+# ask <question> [y|n] -- a yes/no question. Default is n.
+#
+# Silent and answers with the DEFAULT when stdin is not a tty (`curl | bash`, CI,
+# tests/double-run.sh), when --yes was passed, or during a dry run -- a dry run changes
+# nothing either way and must never block. That is why the defaults are the conservative
+# answer everywhere: an unattended run must not acquire things nobody asked for.
+ask() {
+  local q def reply
+  q="$1"
+  def="${2:-n}"
+  if [ "$DRY_RUN" = "1" ] || [ "$MACBOOT_YES" = "1" ] || [ ! -t 0 ]; then
+    case "$def" in y | Y) return 0 ;; *) return 1 ;; esac
+  fi
+  case "$def" in
+    y | Y) printf '  %s?%s %s [Y/n] ' "$_C_BLUE" "$_C_RESET" "$q" >&2 ;;
+    *) printf '  %s?%s %s [y/N] ' "$_C_BLUE" "$_C_RESET" "$q" >&2 ;;
+  esac
+  # `|| reply=''` so a closed stdin mid-run falls back to the default instead of aborting
+  # the module under `set -e`.
+  read -r reply || reply=''
+  [ -n "$reply" ] || reply="$def"
+  case "$reply" in y | Y | yes | YES) return 0 ;; *) return 1 ;; esac
+}
+
+# pause_for <label> -- stop after printing commands the user has to run themselves.
+#
+# For the few steps macboot will not do on anyone's behalf. Printing them and carrying on
+# is what buries them: by the end of a ten-module run they are hundreds of lines up, which
+# is the same reason finish() has to replay warnings at all. Skipped in every
+# non-interactive path, so it can never hang a `curl | bash` or a test.
+pause_for() {
+  local reply
+  if [ "$DRY_RUN" = "1" ] || [ "$MACBOOT_YES" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  printf '  %s>%s %s -- Enter to continue, Ctrl-C to stop here: ' \
+    "$_C_YELLOW" "$_C_RESET" "$1" >&2
+  read -r reply || true
+}
 
 # ---------------------------------------------------------------------------
 # Filesystem helpers
@@ -362,8 +463,33 @@ $end"
       return 0
     fi
     tmp="$file.macboot.$$"
-    awk -v b="$begin" -v e="$end" \
-      'index($0,b){f=1;next} index($0,e){f=0;next} !f{print}' "$file" >"$tmp"
+    # Anchored to the FIRST MATCHED PAIR, and it refuses to write at all if the pair
+    # does not close.
+    #
+    # The previous version toggled on both fences with no memory: `index($0,b){f=1;next}
+    # index($0,e){f=0;next} !f{print}`. A begin fence with no end fence therefore left it
+    # toggled on to end-of-file and DELETED every line below the marker -- the user's own
+    # aliases, exports and prompt setup -- while printing a green "block replaced" and
+    # taking no backup. Reproduced on a 10-line .zshrc: the 4 lines of personal config
+    # below the fence were gone after one run. One hand-edit that drops the closing line
+    # is enough, and `index()` is SUBSTRING matching, so a comment merely quoting the
+    # fence text re-opened the delete even in a file whose real pair was well formed.
+    # `seen` closes both: after one region every remaining line is copied verbatim, and
+    # END makes "never closed" an error instead of a silent truncation.
+    if ! awk -v b="$begin" -v e="$end" '
+      seen { print; next }
+      !f && index($0, b) { f = 1; next }
+      f && index($0, e) { f = 0; seen = 1; next }
+      !f { print }
+      END { if (!seen) exit 1 }' "$file" >"$tmp"; then
+      rm -f "$tmp"
+      warn "block $marker in $(basename "$file"): found the opening fence but no closing
+     fence after it, so macboot cannot tell where its own block ends. NOTHING was
+     changed -- deleting to end-of-file would take your own config with it. Restore
+     the closing line, or delete the opening one:
+         $end"
+      return 0
+    fi
     printf '%s\n' "$desired" >>"$tmp"
     if [ -L "$file" ]; then
       # Write THROUGH the symlink. `mv tmp link` replaces the LINK ITSELF with a
@@ -373,7 +499,15 @@ $end"
       # a public repo, so a ~/.zshrc symlinked out of a stow/chezmoi checkout is an
       # ordinary case. Atomicity is traded away knowingly; a detached dotfiles repo
       # is the worse failure, because it is silent and discovered weeks later.
-      cat "$tmp" >"$file" || die "ensure_block: cannot write through symlink $file"
+      # The recovery file is named on purpose: `rm -f "$tmp"` runs only AFTER the cat
+      # succeeds, so any write error or kill in the (measured: ~2.5 ms) window leaves a
+      # COMPLETE copy of the intended file at $tmp, including every preserved line from
+      # outside the fence. That is the fact that actually justifies trading atomicity
+      # away here, and a message that does not mention it turns the best safety property
+      # in this function into one nobody finds.
+      cat "$tmp" >"$file" ||
+        die "ensure_block: cannot write through symlink $file
+     (the complete new file is at $tmp -- copy it into place by hand)"
       rm -f "$tmp"
     else
       # Carry the original mode across before the rename: a fresh temp file gets
@@ -381,7 +515,7 @@ $end"
       if mode="$(stat -f '%Lp' "$file" 2>/dev/null)" && [ -n "$mode" ]; then
         chmod "$mode" "$tmp"
       fi
-      mv "$tmp" "$file"
+      mv "$tmp" "$file" || die "ensure_block: cannot replace $file (new file left at $tmp)"
     fi
     MACBOOT_CHANGED=$((MACBOOT_CHANGED + 1))
     ok "block $marker in $(basename "$file") -> replaced"
@@ -394,7 +528,13 @@ $end"
     return 0
   fi
   run mkdir -p "$(dirname "$file")"
-  printf '\n%s\n' "$desired" >>"$file"
+  # Checked, like the two write paths above. Unchecked, a destination that cannot be
+  # written -- a symlink into a read-only volume is the realistic one -- printed
+  # "line 397: Permission denied" from the shell and then macboot's own green
+  # "block appended", incremented MACBOOT_CHANGED and returned 0: a false success that
+  # also made the changed counter, and therefore the double-run test, meaningless.
+  printf '\n%s\n' "$desired" >>"$file" ||
+    die "ensure_block: cannot append the $marker block to $file"
   MACBOOT_CHANGED=$((MACBOOT_CHANGED + 1))
   ok "block $marker in $(basename "$file") -> appended"
 }
@@ -458,18 +598,26 @@ require_macos() {
   [ "$(uname -s)" = "Darwin" ] || die "macboot is macOS only (found $(uname -s))"
 }
 
-# summary -- the closing box. changed=0 on a second consecutive run is the whole
+# summary -- the closing line. changed=0 on a second consecutive run is the whole
 # idempotency claim, so print it every time rather than only on request.
 #
 # Warnings are counted and echoed here because a warning 200 lines up scrolls away.
 # A bootstrap whose problems are only visible mid-transcript trains people to ignore
 # the transcript.
+#
+# One line, not a three-line box: this is called 15+ times in a full run (every module,
+# bootstrap twice, every test), so the boxes were 44 of `make plan`'s 281 lines. The cow
+# carries the signal that the box's colour used to -- yellow if anything warned, green if
+# anything changed, dim on a clean changed=0 re-run -- and being ASCII it also survives
+# LC_ALL=C, which the box's `┌ │ └` did not.
 summary() {
   local name tail_note col
   step_end
   name="${1:-macboot}"
   tail_note=''
-  [ "$DRY_RUN" = "1" ] && tail_note='  (dry run — nothing was changed)'
+  # Short, and ASCII: banner() already said "dry run - nothing will be changed", and the
+  # em-dash here was the last non-ASCII byte in an entire C-locale transcript.
+  [ "$DRY_RUN" = "1" ] && tail_note='  (dry run)'
 
   if [ "$MACBOOT_WARNED" -gt 0 ]; then
     col="$_C_YELLOW"
@@ -479,12 +627,14 @@ summary() {
     col="$_C_DIM"
   fi
 
-  printf '\n%s┌─ %s ─%s\n' "$col" "$name" "$_C_RESET" >&2
-  printf '%s│%s  %s%s%s changed   %s%s%s skipped   %s%s%s warnings%s\n' \
-    "$col" "$_C_RESET" \
+  # Report the counters up to whoever ran this module, if anyone is listening.
+  [ -n "$MACBOOT_TALLY" ] && printf '%s %s %s\n' \
+    "$MACBOOT_CHANGED" "$MACBOOT_SKIPPED" "$MACBOOT_WARNED" >>"$MACBOOT_TALLY"
+
+  printf '\n%s   ^__^ (oo)%s %s%s:%s %s%s%s changed  %s%s%s skipped  %s%s%s warnings%s\n' \
+    "$col" "$_C_RESET" "$_C_DIM" "$name" "$_C_RESET" \
     "$_C_GREEN" "$MACBOOT_CHANGED" "$_C_RESET" \
     "$_C_DIM" "$MACBOOT_SKIPPED" "$_C_RESET" \
     "$([ "$MACBOOT_WARNED" -gt 0 ] && printf '%s' "$_C_YELLOW" || printf '%s' "$_C_DIM")" \
     "$MACBOOT_WARNED" "$_C_RESET" "$tail_note" >&2
-  printf '%s└─%s\n' "$col" "$_C_RESET" >&2
 }

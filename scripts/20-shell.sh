@@ -30,11 +30,11 @@ set -euo pipefail
 
 #: Where shell/rc.zsh gets linked. The fence in .zshrc points at this path, so the
 #: checkout can move without editing .zshrc -- re-running macboot repoints the link.
-SHELL_CFG_DIR="${SHELL_CFG_DIR:-$MACBOOT_HOME/.config/macboot}"
+SHELL_CFG_DIR="$MACBOOT_HOME/.config/macboot"
 
 #: The user's own drop-in directory. macboot creates it and drops a README, and never
 #: writes a *.zsh unit into it -- so nothing macboot does can clobber your config.
-USER_CONF_DIR="${USER_CONF_DIR:-$MACBOOT_HOME/.config/zsh/conf.d}"
+USER_CONF_DIR="$MACBOOT_HOME/.config/zsh/conf.d"
 
 usage() {
   cat <<'EOF'
@@ -44,9 +44,6 @@ Links shell/rc.zsh into ~/.config/macboot/, creates ~/.config/zsh/conf.d/ for yo
 own drop-ins, and adds one fenced source line to your .zshrc. Never rewrites .zshrc
 outside its own markers, and never changes the login shell (that needs a password).
 
-Environment:
-  SHELL_CFG_DIR   where rc.zsh is linked   (default ~/.config/macboot)
-  USER_CONF_DIR   your own drop-in dir     (default ~/.config/zsh/conf.d)
 EOF
 }
 
@@ -140,6 +137,9 @@ report_login_shell() {
      read from .zshrc, so it stays inert until you switch. Run this yourself --
      chsh asks for your password and would hang a scripted run:"
   log "    chsh -s $zsh_path"
+  # Worth stopping for: without it every other thing this module just did has no effect
+  # at all, and the warning is otherwise eight modules from the end of the run.
+  pause_for "switch your login shell with the command above"
 }
 
 # ---------------------------------------------------------------------------

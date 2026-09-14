@@ -175,7 +175,7 @@ step "assert no planned mutation targets the real home"
 # positive on the first run of this test:
 #   * the scratch home, which mktemp can legitimately place under $HOME (TMPDIR);
 #   * MACBOOT_ROOT, because the checkout normally lives under $HOME, so every
-#     honest `would ln -s <checkout>/shell/zshrc ...` contains the home path;
+#     honest `would ln -s <checkout>/shell/rc.zsh ...` contains the home path;
 #   * the command word, plus any `env VAR=val` prefix. `would env HOME=... \
 #     /Users/you/.local/bin/uv python install` names the real home as the TOOL it
 #     runs, which is correct; only the arguments say where a write lands.

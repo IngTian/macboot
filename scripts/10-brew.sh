@@ -11,7 +11,7 @@
 # 2. It installs formula by formula instead of handing the file to `brew bundle
 #    install`, because `brew bundle` cannot distinguish "absent" from "outdated"
 #    and its remedy for both is an upgrade. Measured on the source machine
-#    (Homebrew 7.0.1): `brew bundle check --file=Brewfile` calls 12 of the 17
+#    (Homebrew 7.0.1): `brew bundle check --file=Brewfile` calls 12 of the 18
 #    must-haves unsatisfied while only 7 are actually absent -- gh, fzf, tmux,
 #    htop and gnupg are installed and merely behind. `brew bundle install` would
 #    have upgraded all five. So `check` is used only as the fast all-satisfied
@@ -29,7 +29,7 @@ MACBOOT_OPTIONAL="${MACBOOT_OPTIONAL:-0}"
 
 #: Pinning HEAD rather than a tag is Homebrew's own documented one-liner; a tag
 #: would go stale and 404 on exactly the fresh machine this has to work on.
-BREW_INSTALLER_URL="${BREW_INSTALLER_URL:-https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh}"
+BREW_INSTALLER_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
 # Homebrew's environment, exported for this run only so nothing leaks into the
 # user's profile:
@@ -70,8 +70,8 @@ install_homebrew() {
     # Put it on PATH for THIS process if it is not already. Returning without doing
     # this was the module's worst bug: main()'s `if ! has brew` then warned "Homebrew
     # is not on PATH yet; the formula phases are skipped", called summary(), and
-    # returned 0 -- so bootstrap.sh wrote the 10-brew.done marker, all 17 must-have
-    # formulae were never installed, and a plain re-run answered "done earlier".
+    # returned 0 -- so bootstrap.sh wrote the 10-brew.done marker, not one must-have
+    # formula was installed, and a plain re-run answered "done earlier".
     # An exit code of 0 for "I installed nothing" is the worst shape a bootstrap
     # failure can take, because it is indistinguishable from success.
     #
@@ -240,7 +240,15 @@ bundle() {
   # to prove it (measured 0.9s). Any other outcome -- unsatisfied, or a Homebrew
   # too old to have `bundle` built in -- falls through to the path below, which
   # needs no bundle subcommand at all.
-  if brew bundle check --file="$bf_file" >/dev/null 2>&1; then
+  #
+  # NOT in a dry run. `brew bundle` is Ruby and it materialises the signed JSON API
+  # payload plus a bootsnap cache into $HOME/Library/Caches/Homebrew: measured 904 paths
+  # and ~37 MB against a fresh HOME, plus one network fetch. `--dry-run` promises to write
+  # nothing, "not to any cache", and this is the same class of bug as the ssh probe that
+  # used to create ~/.ssh/known_hosts -- a read-only-looking question with a write side
+  # effect. The `brew list` path below answers the same question and measured 0 leftover
+  # paths, so a dry run simply takes it and reports "N present, none missing" instead.
+  if [ "$DRY_RUN" != "1" ] && brew bundle check --file="$bf_file" >/dev/null 2>&1; then
     skip "$bf_label -> all formulae satisfied"
     return 0
   fi
@@ -253,7 +261,7 @@ bundle() {
   }
 
   # One `brew list` for the whole file: measured 0.04s, against roughly a second
-  # per formula for `brew list <name>` seventeen times over.
+  # per formula for `brew list <name>` run once per name in the file.
   bf_installed="$(brew list --formula -1)" ||
     die "brew list failed; the Homebrew install at $(brew_prefix) is broken"
 

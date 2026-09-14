@@ -21,9 +21,6 @@
 #                        real user's preferences. Never in an automated test.
 #   * 70-claude          runs `claude plugin ...` against a live marketplace.
 #   * 80-mytools         clones and builds from the network.
-#   (check-unpushed.sh is not in scripts/ at all -- it is a standalone migration tool,
-#    not a bootstrap step, so it is neither run nor excluded here. It has its own CI
-#    job with fixture repos.)
 #   * anything that changes the login shell (chsh) -- interactive password prompt.
 #
 # So `defaults` idempotency and Homebrew idempotency are NOT covered here, by
@@ -38,7 +35,7 @@ set -euo pipefail
 #: Basenames eligible for a real run. An allowlist, not a denylist: an unreviewed
 #: scripts/45-foo.sh must never be executed for real by a test just because nobody
 #: added it to a skip list. New modules are reported as excluded until reviewed.
-DOUBLE_RUN_ALLOW="${DOUBLE_RUN_ALLOW:-00-preflight.sh 20-shell.sh 50-git.sh 99-apps.sh}"
+DOUBLE_RUN_ALLOW="00-preflight.sh 20-shell.sh 50-git.sh 99-apps.sh"
 
 #: Where the two scratch homes live. TMPDIR by default so a run cannot dirty the
 #: checkout; point it somewhere durable when you want to inspect the result.

@@ -31,7 +31,7 @@ _MACOS_CHANGED_AT_START=0
 
 #: Where screenshots go. Kept out of the Desktop because a Desktop full of
 #: Screenshot PNGs is also what Stage Manager and every screen share show.
-SCREENSHOT_DIR="${SCREENSHOT_DIR:-$MACBOOT_HOME/Screenshots}"
+SCREENSHOT_DIR="$MACBOOT_HOME/Screenshots"
 
 usage() {
   cat <<'EOF'

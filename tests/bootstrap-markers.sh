@@ -99,9 +99,11 @@ want "alpha ran again" "1" "$(ran 10-alpha)"
 want "all three still marked" "10-alpha 20-beta 99-omega" "$(markers)"
 
 step "a TARGETED run must not mark the module complete"
-# The regression this file exists for. `make check` is --only 05 and `make apps` is
-# --only 99; when those wrote full markers, every later `make all` skipped the
-# unpushed-work gate and never printed the GUI-app list, and only --restart recovered.
+# The regression this file exists for. `make apps` is --only 99 and `make mytools` is
+# --only 80; when a targeted run wrote a full marker, every later `make all` skipped
+# that module -- so the real bootstrap never printed the GUI-app list -- and only
+# --restart recovered, which is documented for the resume case and nowhere near those
+# targets.
 rm -rf "$FAKE_HOME/.macboot"
 boot --only 20 >/dev/null
 want "beta ran" "1" "$(ran 20-beta)"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # 80-mytools.sh -- build the author's own tools from source. OPT-IN.
 #
-# Nobody else's bootstrap should clone four of my repos, so this module does
-# nothing unless MACBOOT_MYTOOLS=1 (what `make mytools` sets) or --force is passed.
-# bootstrap.sh globs every scripts/NN-*.sh, so the gate has to live here rather
-# than in a list somewhere that can drift.
+# Nobody else's bootstrap should clone four of my repos, so each one is asked for
+# separately and every answer defaults to no. With no terminal to ask at -- `curl | bash`,
+# CI, the test suite -- or under --yes, nothing is built at all. bootstrap.sh globs every
+# scripts/NN-*.sh, so that gate has to live here rather than in a list that can drift.
 #
 # Every repo is cloned over HTTPS, never SSH: key custody is the one problem this
 # bootstrap deliberately does not solve (spec, "Left unsolved"), and a fresh Mac
@@ -13,9 +13,9 @@ set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-#: Where checkouts land. Overridable because these are real working copies you may
-#: want to hack on, not build scratch -- they are kept, never deleted.
-MACBOOT_SRC="${MACBOOT_SRC:-$MACBOOT_HOME/src}"
+#: Where checkouts land. Real working copies you may want to hack on, not build
+#: scratch -- they are kept, never deleted.
+MACBOOT_SRC="$MACBOOT_HOME/src"
 
 #: 1 = actually do it.
 MACBOOT_MYTOOLS="${MACBOOT_MYTOOLS:-0}"
@@ -29,8 +29,8 @@ BIN_DIR="$MACBOOT_HOME/.local/bin"
 #: write into the real home and leave a `day` on the tester's PATH. Both variables
 #: resolve to uv's own defaults when MACBOOT_HOME is $HOME, so this costs nothing
 #: in the normal case and makes the double-run test honest.
-UV_TOOL_DIR="${UV_TOOL_DIR:-$MACBOOT_HOME/.local/share/uv/tools}"
-UV_TOOL_BIN_DIR="${UV_TOOL_BIN_DIR:-$BIN_DIR}"
+UV_TOOL_DIR="$MACBOOT_HOME/.local/share/uv/tools"
+UV_TOOL_BIN_DIR="$BIN_DIR"
 export UV_TOOL_DIR UV_TOOL_BIN_DIR
 
 #: Set by clone_or_pull: fresh | updated | current. Read by the build steps to
@@ -41,12 +41,15 @@ usage() {
   cat <<'EOF'
 Usage: 80-mytools.sh [--force] [--dry-run]
 
-Clones or fast-forwards my own tools into $MACBOOT_SRC (default ~/src) and builds
+Clones or fast-forwards my own tools into ~/src and builds
 each one: witness (Go), daylogs (Python/uv), manifold (Swift screensaver) and
 trading-desk (private -- skipped with a message when you cannot see it).
 
-Opt-in: does nothing unless MACBOOT_MYTOOLS=1 or --force. A missing toolchain
-(go, uv, swiftc) warns and skips that tool; it never fails the run.
+Each tool is asked for separately and defaults to NO. --force (or MACBOOT_MYTOOLS=1,
+which `make mytools` sets) answers yes to all of them without asking. With no
+terminal to ask at, or under --yes, nothing is built.
+
+A missing toolchain (go, uv, swiftc) warns and skips that tool; it never fails the run.
 EOF
 }
 
@@ -165,7 +168,20 @@ uv_tool_install() {
   dir="$1"
   tool="$2"
   rc=0
-  if uv tool list 2>/dev/null | grep -q "^$tool "; then
+  # In a dry run, describe and return: `uv tool list` creates ~/.cache/uv (measured),
+  # which is the same cache 30-python.sh already guards a probe against, and --dry-run
+  # must write nothing. Nothing below it would run anyway, since run() is inert there.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "would uv tool install $dir (--force if the checkout moved) -> $UV_TOOL_BIN_DIR"
+    return 0
+  fi
+  # Colour forced OFF for this one call, and the `^` anchor kept. With FORCE_COLOR or
+  # CLICOLOR_FORCE set in the environment -- ordinary on a developer's machine -- uv wraps
+  # the tool name in ANSI, so `^$tool ` never matched, every run took the --force branch,
+  # and a second run reported changed=2 instead of 0. Suppressing the colour at the source
+  # is what keeps the anchor: dropping it instead would let `logs` match `daylogs `.
+  if env -u FORCE_COLOR -u CLICOLOR_FORCE NO_COLOR=1 uv tool list 2>/dev/null |
+    grep -q "^$tool "; then
     if [ "$CLONE_STATE" = "current" ]; then
       skip "$tool -> already installed, checkout unchanged"
       return 0
@@ -193,7 +209,30 @@ tool_witness() {
 
   # The Makefile names the binary after the target platform, so ask go rather than
   # hardcoding darwin-arm64 and breaking on an Intel Mac.
-  bin="$dir/bin/witness-$(go env GOOS)-$(go env GOARCH)"
+  #
+  # Guarded, and inside an `if` so `set -e` is suspended. As a bare assignment a failing
+  # `go env` killed the module instantly: on any machine with a shimmed-but-broken Go
+  # (goenv or asdf pointing at a version a cleanup deleted -- true on THIS machine, where
+  # `go env` prints "cannot find GOROOT directory: ~/.goenv/versions/1.25.1" and exits 2)
+  # `make mytools-plan` ended right after a green "witness -> cloned" tick, with no warn,
+  # no die and no summary box, and daylogs/manifold/trading-desk silently never ran.
+  # `go env` also writes go's telemetry counter file into ~/Library/Application Support/go
+  # in a dry run, which is a --dry-run purity violation on its own; the value is only used
+  # for a "would link" line there, so skip the probe entirely.
+  if [ "$DRY_RUN" = "1" ]; then
+    # Named, not resolved. Nothing is built in a dry run, so the only consumer is the
+    # "would link" line below -- and running the probe would write go's telemetry counter
+    # into ~/Library/Application Support/go, which --dry-run promises not to do. The rest
+    # of this function still runs, so the transcript keeps its "would make" line.
+    bin="$dir/bin/witness-<goos>-<goarch>"
+  elif ! goos="$(go env GOOS 2>/dev/null)" || ! goarch="$(go env GOARCH 2>/dev/null)" ||
+    [ -z "$goos" ] || [ -z "$goarch" ]; then
+    warn "witness -> 'go' is on PATH but 'go env' failed (a broken goenv/asdf shim?);
+     skipping. Check 'go env GOOS' by hand, then re-run --only 80-mytools."
+    return 0
+  else
+    bin="$dir/bin/witness-$goos-$goarch"
+  fi
 
   # `make install` is NOT used on purpose: it also downloads an embedding model and
   # rewires Claude Code's hooks and MCP servers. A bootstrap installs a binary; it
@@ -326,6 +365,15 @@ tool_trading_desk() {
   # config with normal host-key verification. LogLevel=ERROR suppresses the "Permanently
   # added" line, which would otherwise announce a write that no longer happens.
   url=''
+  # Neither probe runs in a dry run. The known_hosts leak above was fixed by hardening
+  # the ssh probe, but `gh repo view` has its own write: on first use gh creates
+  # ~/.local/state/gh/device-id (measured against a fresh HOME) and makes an
+  # authenticated API call. A dry run must write nothing anywhere, and since nothing is
+  # cloned there the answer is only needed to choose between two URL spellings.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "would check whether $slug is reachable (gh, then ssh) and clone it into $dir if so"
+    return 0
+  fi
   if has gh && gh repo view "$slug" >/dev/null 2>&1; then
     url="https://github.com/$slug.git"
   elif GIT_TERMINAL_PROMPT=0 \
@@ -363,22 +411,52 @@ main() {
 
   require_macos
 
-  if [ "$MACBOOT_MYTOOLS" != "1" ]; then
-    skip "mytools -> opt-in (MACBOOT_MYTOOLS=1, --force, or: make mytools)"
+  # Asked per tool, not all-or-nothing.
+  #
+  # These are four unrelated nice-to-haves with four different toolchains -- Go, uv, Swift,
+  # and a private repo most readers cannot see -- so "yes to the set" was the wrong shape:
+  # wanting daylogs is not wanting a screensaver. Each answer defaults to NO, and on a
+  # non-tty run or under --yes nothing is asked and nothing is built, which is what keeps
+  # `curl | bash` and tests/double-run.sh from cloning four repos.
+  #
+  # --force (and MACBOOT_MYTOOLS=1, which `make mytools` sets) still means yes to all,
+  # because the point of that flag is not having to answer.
+  if [ "$MACBOOT_MYTOOLS" != "1" ] && [ "$DRY_RUN" != "1" ] &&
+    { [ ! -t 0 ] || [ "$MACBOOT_YES" = "1" ]; }; then
+    skip "mytools -> nothing asked (no terminal, or --yes). Run: make mytools"
     summary "mytools"
     return 0
   fi
 
-  log "mytools: checkouts in $MACBOOT_SRC, kept (never deleted) so you can edit them"
+  log "mytools: four optional tools of mine. Checkouts land in $MACBOOT_SRC and are"
+  log "kept, never deleted, so you can edit them. Say no to any you do not want."
+  [ "$DRY_RUN" != "1" ] ||
+    log "(dry run: showing all four, since a live run may be told yes to any of them)"
 
-  step "witness (Go, public)"
-  tool_witness
-  step "daylogs (Python, public)"
-  tool_daylogs
-  step "manifold (Swift screensaver, public)"
-  tool_manifold
-  step "trading-desk (private)"
-  tool_trading_desk
+  # want <tool> -- yes if --force/MACBOOT_MYTOOLS was given, else ask.
+  #
+  # Always yes in a dry run, and that is the honest answer rather than a shortcut: a plan
+  # has to show every mutation a live run could make, and which tools a live run builds is
+  # decided by answers a dry run does not have. Answering `n` here would print a plan for
+  # nothing and quietly drop four repos' worth of clone-and-build from `make plan`.
+  want() { [ "$MACBOOT_MYTOOLS" = "1" ] || [ "$DRY_RUN" = "1" ] || ask "build $1?" n; }
+
+  if want "witness (Go: a local semantic-search index)"; then
+    step "witness (Go, public)"
+    tool_witness
+  fi
+  if want "daylogs (Python: a day-log CLI)"; then
+    step "daylogs (Python, public)"
+    tool_daylogs
+  fi
+  if want "manifold (Swift: a screensaver)"; then
+    step "manifold (Swift screensaver, public)"
+    tool_manifold
+  fi
+  if want "trading-desk (private -- skipped unless you can see the repo)"; then
+    step "trading-desk (private)"
+    tool_trading_desk
+  fi
 
   summary "mytools"
 }

@@ -3,10 +3,9 @@
 # "would <command>" and changes nothing.
 #
 # Modules are selected by their numeric prefix (--only 10) rather than their
-# filename. The prefixes are the run order the spec fixes; the names after them
-# have already churned once (the gate was rescue-check before check-unpushed),
-# and a Makefile that hardcodes a name breaks silently on the rename by matching
-# nothing.
+# filename. The prefixes are the run order the spec fixes; the names after them have
+# churned before, and a Makefile that hardcodes a name breaks silently on the rename
+# by matching nothing.
 
 SHELL := /bin/bash
 # NOTE: .SHELLFLAGS was added in GNU Make 3.82 and stock macOS ships 3.81, so on the
@@ -32,7 +31,7 @@ SH_FILES := $(wildcard *.sh) $(wildcard lib/*.sh) $(wildcard scripts/*.sh) \
             $(wildcard tests/*.sh)
 
 .PHONY: help plan all optional optional-plan mytools mytools-plan apps \
-        check lint fmt test module module-plan
+        lint fmt test module module-plan
 
 ##@ Start here
 help: ## this list
@@ -64,16 +63,7 @@ mytools: ## build my own tools; skips the private one
 apps: ## print the GUI apps that are missing, with paste-ready commands
 	@$(BOOTSTRAP) --only 99 --yes
 
-##@ Gates and quality
-check: ## migrating off a Mac? non-zero while any commit exists only on this disk
-	@# Calls the tool directly. It is NOT a bootstrap module: macboot sets up a BRAND
-	@# NEW Mac, where there are no repositories to check, and a published bootstrap
-	@# that refuses to proceed because a stranger's repo has an unpushed commit is a
-	@# hostile default. As a module it also could not tell "you have unpushed work"
-	@# apart from its own internal failures -- with git off PATH it printed an empty
-	@# findings list and accused the user anyway.
-	@bash check-unpushed.sh --report
-
+##@ Quality
 lint: ## shellcheck + shfmt -d over every shell file in the tree
 	@command -v $(SHELLCHECK) >/dev/null || \
 	  { echo 'shellcheck missing: brew install shellcheck (it is in the Brewfile)'; exit 1; }
@@ -101,7 +91,7 @@ test: lint ## lint, bash -n, then the real tests: purity, bootstrap flow, idempo
 	@# verifies idempotency at all, was reachable from no target.
 	@bash tests/dry-run-purity.sh
 	@bash tests/bootstrap-markers.sh
-	@bash tests/check-unpushed.sh
+	@bash tests/common-helpers.sh
 	@bash tests/double-run.sh
 
 ##@ One module at a time
