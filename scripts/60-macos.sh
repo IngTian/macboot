@@ -158,7 +158,7 @@ _NL='
 '
 
 apply_settings() {
-  local total done_n domain key type value item_log kept before_skipped already rows
+  local total domain key type value item_log kept before_skipped already rows
   # ONE filter, applied once, feeding both the count and the loop.
   #
   # The comment here used to claim the two "can never desynchronise" because both came
@@ -174,7 +174,6 @@ apply_settings() {
   rows="$(settings_table | grep -vE '^[[:space:]]*(#|$)' || true)"
   total="$(printf '%s' "$rows" | grep -c . || true)"
   [ -n "$total" ] || total=0
-  done_n=0
   kept=''
   already="$MACBOOT_SKIPPED"
 
@@ -207,8 +206,6 @@ apply_settings() {
     if [ "$MACBOOT_SKIPPED" -eq "$before_skipped" ]; then
       kept="$kept$(cat "$item_log")$_NL"
     fi
-    done_n=$((done_n + 1))
-    progress "$done_n" "$total" "$key"
   done < <(printf '%s\n' "$rows")
 
   rm -f "$item_log"

@@ -228,12 +228,9 @@ verify_clean_env() {
   # even when the arrangement is completely broken -- that false pass is how this
   # requirement gets ticked off while hooks keep failing.
   missing=''
-  n=0
   for b in node npm npx; do
-    n=$((n + 1))
     env -i HOME="$MACBOOT_HOME" /bin/zsh -c "command -v $b" >/dev/null 2>&1 ||
       missing="$missing $b"
-    progress "$n" 3 "clean-env probe: $b"
   done
 
   if [ -z "$missing" ]; then

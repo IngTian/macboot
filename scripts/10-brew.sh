@@ -292,15 +292,21 @@ bundle() {
   bf_done=0
   bf_failed=''
   for bf_name in $bf_missing; do
+    bf_done=$((bf_done + 1))
+    # Announced BEFORE the install, not tallied after it. This is the one loop in macboot
+    # where progress is a real question -- each formula is seconds to minutes of someone
+    # else's build output -- and the useful answer is which one is running now and how many
+    # are left. A bar drawn afterwards told you what had already finished, which you could
+    # already see, and it was the same 24 glyphs whether N was 4 or 27.
+    #
+    # Live runs only. In a dry run the `run` below already prints one
+    # "would brew install --formula <name>" per formula, so this would both duplicate that
+    # list and claim to be "installing" something during a run that installs nothing.
+    [ "$DRY_RUN" = "1" ] || log "[$bf_done/$bf_n] installing $bf_name"
     # --formula so a name that is also a cask token can never resolve to the GUI
     # app. Brew's own output stays visible: when a build fails, the log path it
     # prints is the only thing that helps.
     run brew install --formula "$bf_name" || bf_failed="$bf_failed $bf_name"
-    bf_done=$((bf_done + 1))
-    # Drawn after each install so the bar lands below brew's own output instead
-    # of being overwritten by it. Suppressed for a single formula, where a 100%
-    # bar says less than the line above it.
-    [ "$bf_n" -gt 1 ] && progress "$bf_done" "$bf_n" "$bf_name"
   done
 
   if [ -n "$bf_failed" ]; then

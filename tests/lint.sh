@@ -72,10 +72,8 @@ check() {
   _lbl="$1"
   _report="$2"
   shift 2
-  _n=0
   : >"$_report"
   for _file in "${FILES[@]}"; do
-    _n=$((_n + 1))
     _rel="${_file#"$MACBOOT_ROOT"/}"
     # `|| true` instead of letting set -e fire: a finding is data this test
     # collects, not an error that should abort the sweep at the first file.
@@ -85,7 +83,6 @@ check() {
       printf '%s -- %s\n%s\n\n' "$_lbl" "$_rel" "$_out" >>"$_report"
       warn "$_lbl: $_rel"
     fi
-    progress "$_n" "$TOTAL" "$_rel"
   done
 }
 

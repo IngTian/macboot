@@ -114,6 +114,11 @@ STATE_DIR="$MACBOOT_HOME/.macboot/state"
 # rather than exported, so bootstrap's OWN warn() calls do not also land in the replay --
 # they are already three lines above the closing line, and duplicating them makes
 # tests/bootstrap-markers.sh's `grep -c '20-beta exited 3'` read 2.
+# When the run started, for the one line of progress information that is worth printing
+# after the fact. A first `make all` is minutes of Homebrew; a re-run is seconds. Being told
+# which of those just happened is the difference between "it worked" and "did it do anything?"
+_RUN_STARTED_AT=$(date +%s)
+
 _TALLY="${TMPDIR:-/tmp}/macboot-tally.$$"
 trap 'spin_stop; rm -f "$_TALLY" "$_TALLY.warn"' EXIT
 
@@ -132,10 +137,18 @@ FAILED=''
 # NEXT, because "open a new terminal" and `chsh` are the difference between a bootstrap
 # that worked and a shell that looks untouched.
 finish() {
-  local c s w a b d
+  local c s w a b d elapsed
   c=0
   s=0
   w=0
+  # Printed before the counters, so the two read as one sentence: how long, then what for.
+  # Minutes only above 90s -- "took 4s" is more useful than "took 0m4s".
+  elapsed=$(($(date +%s) - _RUN_STARTED_AT))
+  if [ "$elapsed" -ge 90 ]; then
+    log "done in $((elapsed / 60))m$((elapsed % 60))s"
+  else
+    log "done in ${elapsed}s"
+  fi
   if [ -f "$_TALLY" ]; then
     while read -r a b d; do
       c=$((c + a))
