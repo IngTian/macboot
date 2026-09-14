@@ -30,11 +30,11 @@ set -euo pipefail
 
 #: Where shell/rc.zsh gets linked. The fence in .zshrc points at this path, so the
 #: checkout can move without editing .zshrc -- re-running macboot repoints the link.
-SHELL_CFG_DIR="${SHELL_CFG_DIR:-$MACBOOT_HOME/.config/macboot}"
+SHELL_CFG_DIR="$MACBOOT_HOME/.config/macboot"
 
 #: The user's own drop-in directory. macboot creates it and drops a README, and never
 #: writes a *.zsh unit into it -- so nothing macboot does can clobber your config.
-USER_CONF_DIR="${USER_CONF_DIR:-$MACBOOT_HOME/.config/zsh/conf.d}"
+USER_CONF_DIR="$MACBOOT_HOME/.config/zsh/conf.d"
 
 usage() {
   cat <<'EOF'
@@ -44,9 +44,6 @@ Links shell/rc.zsh into ~/.config/macboot/, creates ~/.config/zsh/conf.d/ for yo
 own drop-ins, and adds one fenced source line to your .zshrc. Never rewrites .zshrc
 outside its own markers, and never changes the login shell (that needs a password).
 
-Environment:
-  SHELL_CFG_DIR   where rc.zsh is linked   (default ~/.config/macboot)
-  USER_CONF_DIR   your own drop-in dir     (default ~/.config/zsh/conf.d)
 EOF
 }
 

@@ -13,7 +13,7 @@ set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-APPS_TSV="${APPS_TSV:-$MACBOOT_ROOT/apps.tsv}"
+APPS_TSV="$MACBOOT_ROOT/apps.tsv"
 
 #: `brew list --cask` takes about a second, so it is called ONCE and matched
 #: against in memory. One call per row turned this module into a seven-second wait

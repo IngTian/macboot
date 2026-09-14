@@ -25,18 +25,18 @@ set -euo pipefail
 #: The vendor's own installer. Homebrew is NOT an option here: brew's uv would put
 #: its interpreters under a prefix brew also upgrades, and `brew upgrade python`
 #: would then move a python out from under a project uv had pinned.
-UV_INSTALLER_URL="${UV_INSTALLER_URL:-https://astral.sh/uv/install.sh}"
+UV_INSTALLER_URL="https://astral.sh/uv/install.sh"
 
 #: Where the installer puts uv. Its default is $XDG_BIN_HOME, falling back to
 #: ~/.local/bin -- passed explicitly so the answer does not depend on whether the
 #: invoking shell happens to export XDG_BIN_HOME.
-UV_BIN_DIR="${UV_BIN_DIR:-$MACBOOT_HOME/.local/bin}"
+UV_BIN_DIR="$MACBOOT_HOME/.local/bin"
 
 #: A pinned MINOR, not "3" and not "latest". `uv python install 3` follows the
 #: newest release, so the same bootstrap run six months apart would hand two
 #: machines different interpreters and no uv.lock in the owner's repos was
 #: resolved against the second one.
-MACBOOT_PYTHON="${MACBOOT_PYTHON:-3.13}"
+MACBOOT_PYTHON="3.13"
 
 usage() {
   cat <<'EOF'
@@ -46,8 +46,6 @@ Installs uv (vendor installer, ~/.local/bin) and one pinned CPython via
 `uv python install`. Creates no project venvs -- those are per-project and
 per-lockfile, so they are printed as guidance instead.
 
-  UV_BIN_DIR       where uv is installed        (default ~/.local/bin)
-  MACBOOT_PYTHON   interpreter minor to install (default 3.13)
 EOF
 }
 

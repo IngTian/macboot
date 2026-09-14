@@ -13,9 +13,9 @@ set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
-#: Where checkouts land. Overridable because these are real working copies you may
-#: want to hack on, not build scratch -- they are kept, never deleted.
-MACBOOT_SRC="${MACBOOT_SRC:-$MACBOOT_HOME/src}"
+#: Where checkouts land. Real working copies you may want to hack on, not build
+#: scratch -- they are kept, never deleted.
+MACBOOT_SRC="$MACBOOT_HOME/src"
 
 #: 1 = actually do it.
 MACBOOT_MYTOOLS="${MACBOOT_MYTOOLS:-0}"
@@ -29,8 +29,8 @@ BIN_DIR="$MACBOOT_HOME/.local/bin"
 #: write into the real home and leave a `day` on the tester's PATH. Both variables
 #: resolve to uv's own defaults when MACBOOT_HOME is $HOME, so this costs nothing
 #: in the normal case and makes the double-run test honest.
-UV_TOOL_DIR="${UV_TOOL_DIR:-$MACBOOT_HOME/.local/share/uv/tools}"
-UV_TOOL_BIN_DIR="${UV_TOOL_BIN_DIR:-$BIN_DIR}"
+UV_TOOL_DIR="$MACBOOT_HOME/.local/share/uv/tools"
+UV_TOOL_BIN_DIR="$BIN_DIR"
 export UV_TOOL_DIR UV_TOOL_BIN_DIR
 
 #: Set by clone_or_pull: fresh | updated | current. Read by the build steps to
@@ -41,7 +41,7 @@ usage() {
   cat <<'EOF'
 Usage: 80-mytools.sh [--force] [--dry-run]
 
-Clones or fast-forwards my own tools into $MACBOOT_SRC (default ~/src) and builds
+Clones or fast-forwards my own tools into ~/src and builds
 each one: witness (Go), daylogs (Python/uv), manifold (Swift screensaver) and
 trading-desk (private -- skipped with a message when you cannot see it).
 

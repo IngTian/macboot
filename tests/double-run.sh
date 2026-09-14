@@ -35,7 +35,7 @@ set -euo pipefail
 #: Basenames eligible for a real run. An allowlist, not a denylist: an unreviewed
 #: scripts/45-foo.sh must never be executed for real by a test just because nobody
 #: added it to a skip list. New modules are reported as excluded until reviewed.
-DOUBLE_RUN_ALLOW="${DOUBLE_RUN_ALLOW:-00-preflight.sh 20-shell.sh 50-git.sh 99-apps.sh}"
+DOUBLE_RUN_ALLOW="00-preflight.sh 20-shell.sh 50-git.sh 99-apps.sh"
 
 #: Where the two scratch homes live. TMPDIR by default so a run cannot dirty the
 #: checkout; point it somewhere durable when you want to inspect the result.

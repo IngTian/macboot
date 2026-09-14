@@ -29,7 +29,7 @@ MACBOOT_OPTIONAL="${MACBOOT_OPTIONAL:-0}"
 
 #: Pinning HEAD rather than a tag is Homebrew's own documented one-liner; a tag
 #: would go stale and 404 on exactly the fresh machine this has to work on.
-BREW_INSTALLER_URL="${BREW_INSTALLER_URL:-https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh}"
+BREW_INSTALLER_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
 # Homebrew's environment, exported for this run only so nothing leaks into the
 # user's profile:

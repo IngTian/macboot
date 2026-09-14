@@ -23,17 +23,17 @@ set -euo pipefail
 
 #: Pinned tag, measured: v0.40.1 is the nvm on the source machine. Never install/
 #: master -- that is a curl|bash of whatever landed on a branch this morning.
-NVM_VERSION="${NVM_VERSION:-v0.40.1}"
-NVM_INSTALLER_URL="${NVM_INSTALLER_URL:-https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh}"
+NVM_VERSION="v0.40.1"
+NVM_INSTALLER_URL="https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh"
 
 #: Deliberately NOT named NVM_DIR: this script is normally run from an interactive
 #: zsh that already exports NVM_DIR=$HOME/.nvm, so inheriting it would point a
 #: MACBOOT_HOME=/tmp/scratch test at the real ~/.nvm and install for real.
-MACBOOT_NVM_DIR="${MACBOOT_NVM_DIR:-$MACBOOT_HOME/.nvm}"
+MACBOOT_NVM_DIR="$MACBOOT_HOME/.nvm"
 
 #: Already first in PATH for interactive shells (shell/conf.d/00-path.zsh); the
 #: fence written below is what puts it in PATH for the non-interactive ones.
-LOCAL_BIN="${LOCAL_BIN:-$MACBOOT_HOME/.local/bin}"
+LOCAL_BIN="$MACBOOT_HOME/.local/bin"
 
 usage() {
   cat <<'EOF'
@@ -44,8 +44,6 @@ aliases it default, then symlinks node/npm/npx into ~/.local/bin so that hooks,
 LaunchAgents and cron can find node -- verified in a clean environment, because an
 inherited-PATH check gives a false pass.
 
-  NVM_VERSION       nvm tag to install (default v0.40.1)
-  MACBOOT_NVM_DIR   install prefix     (default ~/.nvm)
 EOF
 }
 
@@ -115,7 +113,7 @@ install_nvm() {
     spin_stop
     die "the nvm installer failed ($NVM_INSTALLER_URL). Everything below needs it,
      and a machine with no node breaks the Claude Code hooks this bootstrap
-     installs. Check the network, or set NVM_VERSION to a tag that exists."
+     installs. Check the network, or edit NVM_VERSION in scripts/40-node.sh."
   fi
   spin_stop
   ok_live "nvm $NVM_VERSION -> $MACBOOT_NVM_DIR"

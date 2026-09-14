@@ -19,7 +19,7 @@ set -euo pipefail
 #: Warn below this. 20 GB is roughly Xcode CLT + a full Brewfile + one Docker
 #: image; under that, `brew install` starts failing mid-build with a link error
 #: that reads like a compiler bug rather than a full disk.
-PREFLIGHT_MIN_GB="${PREFLIGHT_MIN_GB:-20}"
+PREFLIGHT_MIN_GB=20
 
 usage() {
   cat <<'EOF'
