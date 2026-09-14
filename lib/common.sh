@@ -276,6 +276,55 @@ run() {
   "$@"
 }
 
+# run_quiet <label> <command...> -- run() for a long, NOISY command, with macboot owning
+# the terminal instead of the tool.
+#
+# Forty lines of "==> Fetching / ==> Downloading / ==> Pouring" from four different tools in
+# one transcript is noise a reader has to filter by eye. So the output goes to a log, the
+# caller prints one line, and the log is shown ONLY when it becomes evidence.
+#
+# CAPTURED, NOT HIDDEN, and the distinction is the whole design:
+#   * on failure the last lines are printed and the log is KEPT and named. brew's own error
+#     tells you which build failed and where its logs are, and that is usually the only
+#     actionable thing in the run.
+#   * `==> Caveats` is always surfaced. It is the one part of brew's output that is
+#     instructions rather than progress -- "you must add this to your PATH" belongs on screen.
+#   * on success the log is deleted. Nothing accumulates.
+#
+# stdin comes from /dev/null ON PURPOSE, and it is the load-bearing line. Capturing output
+# makes any prompt INVISIBLE, and this repo has been bitten by exactly that twice: a spinner
+# painted over the Homebrew installer's sudo prompt (10-brew.sh) and over git's credential
+# prompt (80-mytools.sh), and both times the user watched an animation forever with no
+# question on screen. With no stdin a command that wants input FAILS immediately and its
+# error lands in the log, which is recoverable. An invisible wait is not.
+#
+# So this must never wrap something that legitimately needs a human: the Homebrew installer
+# itself stays unredirected for that reason.
+run_quiet() {
+  local _rq_label _rq_log _rq_rc
+  _rq_label="$1"
+  shift
+  if [ "$DRY_RUN" = "1" ]; then
+    run "$@"
+    return 0
+  fi
+  _rq_log="$(mktemp "${TMPDIR:-/tmp}/macboot-out.XXXXXX")" || _rq_log=/dev/null
+  _rq_rc=0
+  run "$@" >"$_rq_log" 2>&1 </dev/null || _rq_rc=$?
+
+  if [ "$_rq_rc" != 0 ]; then
+    warn "$_rq_label failed (exit $_rq_rc). Last 15 lines, full output kept at $_rq_log:"
+    tail -15 "$_rq_log" 2>/dev/null | sed 's/^/     /' >&2
+    return "$_rq_rc"
+  fi
+  if grep -q '^==> Caveats' "$_rq_log" 2>/dev/null; then
+    log "caveats from $_rq_label:"
+    sed -n '/^==> Caveats/,$p' "$_rq_log" | head -20 | sed 's/^/     /' >&2
+  fi
+  rm -f "$_rq_log"
+  return 0
+}
+
 # has <command> -- is it on PATH? Read-only, so it never goes through run().
 has() { command -v "$1" >/dev/null 2>&1; }
 

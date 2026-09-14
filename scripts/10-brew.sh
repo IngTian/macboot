@@ -303,10 +303,18 @@ bundle() {
     # "would brew install --formula <name>" per formula, so this would both duplicate that
     # list and claim to be "installing" something during a run that installs nothing.
     [ "$DRY_RUN" = "1" ] || log "[$bf_done/$bf_n] installing $bf_name"
-    # --formula so a name that is also a cask token can never resolve to the GUI
-    # app. Brew's own output stays visible: when a build fails, the log path it
-    # prints is the only thing that helps.
-    run brew install --formula "$bf_name" || bf_failed="$bf_failed $bf_name"
+    # --formula so a name that is also a cask token can never resolve to the GUI app.
+    #
+    # run_quiet, so this loop reads as macboot's rather than as four tools talking at once:
+    # brew's ==> Fetching/Downloading/Pouring lines go to a log. They are not thrown away --
+    # on failure the tail is printed and the log path named, which is the only actionable
+    # part of a failed build, and `==> Caveats` is always surfaced because it is
+    # instructions rather than progress. `brew install <formula>` needs no sudo (the prefix
+    # is user-owned), which is what makes it safe to capture; the Homebrew INSTALLER above
+    # is deliberately left unredirected because it does.
+    if ! run_quiet "$bf_name" brew install --formula "$bf_name"; then
+      bf_failed="$bf_failed $bf_name"
+    fi
   done
 
   if [ -n "$bf_failed" ]; then
