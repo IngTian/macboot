@@ -36,11 +36,15 @@ usage: ./bootstrap.sh [options]
   --only <module>  run only this module (repeatable; overrides its phase marker)
   --skip <module>  do not run this module (repeatable)
   --optional       also install the nice-to-have tier (Brewfile.optional)
-  --mytools        also build my own tools (witness, daylogs, manifold)
+  --mytools        yes to all of my own tools without asking per tool
   --restart        clear phase markers, so every module runs again
   --keep-going     do not stop at the first failing module; still exits non-zero
   --no-color       plain output (same as NO_COLOR=1 in the environment)
-  --yes            do not ask for confirmation; required when stdin is not a tty
+  --yes            never stop to ask: skip the confirmation, and take the
+                   documented default for every question a module would ask.
+                   Every default is the conservative one, so an unattended run
+                   acquires nothing it was not told to. Required when stdin is
+                   not a tty.
   --help           this text
 
 <module> is any of the four names a module answers to: 40-node.sh, 40-node,

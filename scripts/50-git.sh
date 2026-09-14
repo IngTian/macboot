@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# 50-git.sh -- put the shipped git config and global ignore in place.
+# 50-git.sh -- the shipped git config and the git identity.
 #
-# Two links and two read-only checks. There is no `git config --global` call
-# anywhere in this module on purpose: measured on git 2.54.0 (Apple Git-157), a
-# --global write follows a symlinked ~/.config/git/config and rewrites the target
-# in place, which here is a tracked file in a public repo. So this module links
-# files and then PRINTS the commands the owner has to run; it never edits config
-# on their behalf.
+# There is no `git config --global` call anywhere in this module on purpose: measured on
+# git 2.54.0 (Apple Git-157), a --global write follows a symlinked ~/.config/git/config
+# and rewrites the target in place, which here is a tracked file in a public repo. Every
+# write below therefore names its destination with `git config --file`, which cannot
+# wander.
+#
+# It does ASK, when there is a human to ask. A bootstrap that leaves the machine unable to
+# commit has not finished -- `git commit` with no identity fails outright. The offer is
+# interactive-only and falls back to what this module always did (print the commands,
+# change nothing) on a non-tty run, under --yes, or in a dry run.
+#
+# GitHub access -- gh auth and the SSH key -- is scripts/55-github.sh, deliberately not
+# here: `gh` is on tests/double-run.sh's forbidden list, so one `run gh` in this file made
+# the whole module ineligible and silently removed it from the only idempotency test.
 set -euo pipefail
 # shellcheck source=lib/common.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
@@ -30,8 +38,12 @@ usage() {
 Usage: 50-git.sh [--dry-run]
 
 Links git/gitconfig and git/gitignore to ~/.config/git/{config,ignore}, warns if a
-real ~/.gitconfig would override them, and warns while the git identity is still
-the shipped placeholder. Never edits an existing config file.
+real ~/.gitconfig would override them, then offers to set your git identity in
+~/.config/git/config.local.
+
+The offer is skipped, and the commands printed instead, whenever there is no terminal
+to ask at or --yes was passed. No existing config file is ever edited.
+GitHub access (gh auth, SSH key) is scripts/55-github.sh.
 EOF
 }
 
@@ -131,17 +143,45 @@ git_identity() {
   esac
 }
 
-# Printed, never executed. Deriving an identity from the machine -- the short user
-# name, the full name in the user record, an address found in an existing config --
-# is how a hand-me-down laptop signs its new owner's commits with the old owner's
-# name, and how a work address ends up on a personal repo. Only the human knows.
+# ASKED, never derived. Deriving an identity from the machine -- the short user name, the
+# full name in the user record, an address found in an existing config -- is how a
+# hand-me-down laptop signs its new owner's commits with the old owner's name, and how a
+# work address ends up on a personal repo. Only the human knows. But asking is not
+# deriving, and a bootstrap that leaves the machine unable to commit at all has not
+# finished: `git commit` fails outright with "Please tell me who you are".
+#
+# The write goes to config.local via `git config --file`, NOT `git config --global`.
+# --global is scoped to whichever file git decides is global, and here that follows a
+# symlink into the checkout: measured on git 2.54.0, it rewrites the tracked
+# git/gitconfig in a public repo. --file names the destination and cannot wander.
 identity_howto() {
+  local name email
+
+  # Interactive only, and never in a dry run. Everywhere else this stays what it always
+  # was -- printed advice -- because writing a guessed name into a config file on an
+  # unattended run is exactly the misattribution the paragraph above is about.
+  if [ "$DRY_RUN" != "1" ] && [ "$MACBOOT_YES" != "1" ] && [ -t 0 ] &&
+    ask "set your git identity now?" y; then
+    printf '    name  (e.g. Ada Lovelace): ' >&2
+    read -r name || name=''
+    printf '    email (e.g. ada@example.com): ' >&2
+    read -r email || email=''
+    if [ -n "$name" ] && [ -n "$email" ]; then
+      run git config --file "$GIT_CONF_DIR/config.local" user.name "$name"
+      run git config --file "$GIT_CONF_DIR/config.local" user.email "$email"
+      ok "git identity -> $name <$email> in config.local"
+      return 0
+    fi
+    warn "name or email was empty, so nothing was written"
+  fi
+
   log "Set it in config.local, which git/gitconfig includes and which is OUTSIDE"
   log "this checkout (the file is created for you by the first command):"
   log "    git config --file ~/.config/git/config.local user.name  \"Your Name\""
   log "    git config --file ~/.config/git/config.local user.email \"you@example.com\""
   log "Do NOT use \`git config --global\` for this: it follows the symlink and edits"
   log "$MACBOOT_ROOT/git/gitconfig, a tracked file in a public repo."
+  pause_for "set the two lines above, or skip and do it later"
 }
 
 # ---------------------------------------------------------------------------

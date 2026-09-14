@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # 80-mytools.sh -- build the author's own tools from source. OPT-IN.
 #
-# Nobody else's bootstrap should clone four of my repos, so this module does
-# nothing unless MACBOOT_MYTOOLS=1 (what `make mytools` sets) or --force is passed.
-# bootstrap.sh globs every scripts/NN-*.sh, so the gate has to live here rather
-# than in a list somewhere that can drift.
+# Nobody else's bootstrap should clone four of my repos, so each one is asked for
+# separately and every answer defaults to no. With no terminal to ask at -- `curl | bash`,
+# CI, the test suite -- or under --yes, nothing is built at all. bootstrap.sh globs every
+# scripts/NN-*.sh, so that gate has to live here rather than in a list that can drift.
 #
 # Every repo is cloned over HTTPS, never SSH: key custody is the one problem this
 # bootstrap deliberately does not solve (spec, "Left unsolved"), and a fresh Mac
@@ -45,8 +45,11 @@ Clones or fast-forwards my own tools into ~/src and builds
 each one: witness (Go), daylogs (Python/uv), manifold (Swift screensaver) and
 trading-desk (private -- skipped with a message when you cannot see it).
 
-Opt-in: does nothing unless MACBOOT_MYTOOLS=1 or --force. A missing toolchain
-(go, uv, swiftc) warns and skips that tool; it never fails the run.
+Each tool is asked for separately and defaults to NO. --force (or MACBOOT_MYTOOLS=1,
+which `make mytools` sets) answers yes to all of them without asking. With no
+terminal to ask at, or under --yes, nothing is built.
+
+A missing toolchain (go, uv, swiftc) warns and skips that tool; it never fails the run.
 EOF
 }
 
@@ -408,22 +411,52 @@ main() {
 
   require_macos
 
-  if [ "$MACBOOT_MYTOOLS" != "1" ]; then
-    skip "mytools -> opt-in (MACBOOT_MYTOOLS=1, --force, or: make mytools)"
+  # Asked per tool, not all-or-nothing.
+  #
+  # These are four unrelated nice-to-haves with four different toolchains -- Go, uv, Swift,
+  # and a private repo most readers cannot see -- so "yes to the set" was the wrong shape:
+  # wanting daylogs is not wanting a screensaver. Each answer defaults to NO, and on a
+  # non-tty run or under --yes nothing is asked and nothing is built, which is what keeps
+  # `curl | bash` and tests/double-run.sh from cloning four repos.
+  #
+  # --force (and MACBOOT_MYTOOLS=1, which `make mytools` sets) still means yes to all,
+  # because the point of that flag is not having to answer.
+  if [ "$MACBOOT_MYTOOLS" != "1" ] && [ "$DRY_RUN" != "1" ] &&
+    { [ ! -t 0 ] || [ "$MACBOOT_YES" = "1" ]; }; then
+    skip "mytools -> nothing asked (no terminal, or --yes). Run: make mytools"
     summary "mytools"
     return 0
   fi
 
-  log "mytools: checkouts in $MACBOOT_SRC, kept (never deleted) so you can edit them"
+  log "mytools: four optional tools of mine. Checkouts land in $MACBOOT_SRC and are"
+  log "kept, never deleted, so you can edit them. Say no to any you do not want."
+  [ "$DRY_RUN" != "1" ] ||
+    log "(dry run: showing all four, since a live run may be told yes to any of them)"
 
-  step "witness (Go, public)"
-  tool_witness
-  step "daylogs (Python, public)"
-  tool_daylogs
-  step "manifold (Swift screensaver, public)"
-  tool_manifold
-  step "trading-desk (private)"
-  tool_trading_desk
+  # want <tool> -- yes if --force/MACBOOT_MYTOOLS was given, else ask.
+  #
+  # Always yes in a dry run, and that is the honest answer rather than a shortcut: a plan
+  # has to show every mutation a live run could make, and which tools a live run builds is
+  # decided by answers a dry run does not have. Answering `n` here would print a plan for
+  # nothing and quietly drop four repos' worth of clone-and-build from `make plan`.
+  want() { [ "$MACBOOT_MYTOOLS" = "1" ] || [ "$DRY_RUN" = "1" ] || ask "build $1?" n; }
+
+  if want "witness (Go: a local semantic-search index)"; then
+    step "witness (Go, public)"
+    tool_witness
+  fi
+  if want "daylogs (Python: a day-log CLI)"; then
+    step "daylogs (Python, public)"
+    tool_daylogs
+  fi
+  if want "manifold (Swift: a screensaver)"; then
+    step "manifold (Swift screensaver, public)"
+    tool_manifold
+  fi
+  if want "trading-desk (private -- skipped unless you can see the repo)"; then
+    step "trading-desk (private)"
+    tool_trading_desk
+  fi
 
   summary "mytools"
 }

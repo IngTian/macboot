@@ -137,6 +137,9 @@ report_login_shell() {
      read from .zshrc, so it stays inert until you switch. Run this yourself --
      chsh asks for your password and would hang a scripted run:"
   log "    chsh -s $zsh_path"
+  # Worth stopping for: without it every other thing this module just did has no effect
+  # at all, and the warning is otherwise eight modules from the end of the run.
+  pause_for "switch your login shell with the command above"
 }
 
 # ---------------------------------------------------------------------------

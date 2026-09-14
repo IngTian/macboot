@@ -252,6 +252,12 @@ EOF
     printf '#!/usr/bin/env bash\n'
     printf '# Missing GUI apps, from macboot apps.tsv. Review before running.\n'
     printf '%s\n' "$missing_cmds"
+    # Stop here when there is someone to stop for. This is the one module whose entire
+    # output is commands for the human, and it is the LAST module in the run -- so
+    # carrying straight on means the list is the last thing printed and then immediately
+    # buried under the closing screen. Inert on a non-tty, which is also the case where
+    # stdout is a file being written for later.
+    pause_for "$missing_n cask command(s) above are yours to run"
   fi
 
   summary "apps"

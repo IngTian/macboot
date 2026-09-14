@@ -41,11 +41,22 @@ Every module is standalone, runnable in any order, and safe to re-run.
 | `20-shell` | zsh config: `shell/rc.zsh` plus eight units in `shell/conf.d/` |
 | `30-python` | uv, and one pinned CPython |
 | `40-node` | nvm + node LTS — and node visible to *non-interactive* shells too |
-| `50-git` | git config; your name and email go in `~/.config/git/config.local` |
+| `50-git` | git config, and it offers to set your name and email |
+| `55-github` | offers `gh auth login` — browser sign-in, and uploads an SSH key |
 | `60-macos` | 27 `defaults` — trackpad, Dock, Finder, screenshots, key repeat |
 | `70-claude` | Claude Code settings and one plugin |
-| `80-mytools` | builds my own tools — opt-in, `make mytools` |
+| `80-mytools` | four tools of mine, each asked for separately, all default to no |
 | `99-apps` | prints the GUI apps that are missing |
+
+**It asks before it does the personal bits.** Your git identity, GitHub sign-in and each of
+my four tools are questions, not assumptions — and every one of them is *skipped* rather
+than guessed when there is no terminal to ask at, when you pass `--yes`, or during a dry
+run. So `curl … | bash` and CI stay unattended and acquire nothing you did not ask for.
+
+`55-github` does not roll its own `ssh-keygen`: `gh auth login --git-protocol ssh` already
+creates a key if you have none and uploads the public half itself, so there is nothing to
+paste into a browser. Key **custody** — having a second copy — is still yours, and
+`notes/MANUAL-STEPS.md` says so plainly rather than pretending otherwise.
 
 `make optional` adds the nice-to-have formulae from `Brewfile.optional`. Both Brewfiles
 carry one line of *why* per formula — read those instead of a list here that would rot.

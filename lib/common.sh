@@ -329,6 +329,56 @@ run() {
 has() { command -v "$1" >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------------------
+# Asking the human. Both helpers below return WITHOUT asking in every
+# non-interactive path, so a caller must still be correct when nobody was asked.
+# ---------------------------------------------------------------------------
+
+#: 1 = never stop to ask; take the documented default for every question. Set by --yes.
+#: Defaulted here as well as in bootstrap.sh because a module is runnable on its own, and
+#: under `set -u` an unset variable in ask() would abort it.
+MACBOOT_YES="${MACBOOT_YES:-0}"
+
+# ask <question> [y|n] -- a yes/no question. Default is n.
+#
+# Silent and answers with the DEFAULT when stdin is not a tty (`curl | bash`, CI,
+# tests/double-run.sh), when --yes was passed, or during a dry run -- a dry run changes
+# nothing either way and must never block. That is why the defaults are the conservative
+# answer everywhere: an unattended run must not acquire things nobody asked for.
+ask() {
+  local q def reply
+  q="$1"
+  def="${2:-n}"
+  if [ "$DRY_RUN" = "1" ] || [ "$MACBOOT_YES" = "1" ] || [ ! -t 0 ]; then
+    case "$def" in y | Y) return 0 ;; *) return 1 ;; esac
+  fi
+  case "$def" in
+    y | Y) printf '  %s?%s %s [Y/n] ' "$_C_BLUE" "$_C_RESET" "$q" >&2 ;;
+    *) printf '  %s?%s %s [y/N] ' "$_C_BLUE" "$_C_RESET" "$q" >&2 ;;
+  esac
+  # `|| reply=''` so a closed stdin mid-run falls back to the default instead of aborting
+  # the module under `set -e`.
+  read -r reply || reply=''
+  [ -n "$reply" ] || reply="$def"
+  case "$reply" in y | Y | yes | YES) return 0 ;; *) return 1 ;; esac
+}
+
+# pause_for <label> -- stop after printing commands the user has to run themselves.
+#
+# For the few steps macboot will not do on anyone's behalf. Printing them and carrying on
+# is what buries them: by the end of a ten-module run they are hundreds of lines up, which
+# is the same reason finish() has to replay warnings at all. Skipped in every
+# non-interactive path, so it can never hang a `curl | bash` or a test.
+pause_for() {
+  local reply
+  if [ "$DRY_RUN" = "1" ] || [ "$MACBOOT_YES" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  printf '  %s>%s %s -- Enter to continue, Ctrl-C to stop here: ' \
+    "$_C_YELLOW" "$_C_RESET" "$1" >&2
+  read -r reply || true
+}
+
+# ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
 
