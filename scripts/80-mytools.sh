@@ -242,13 +242,11 @@ tool_witness() {
   if [ "$CLONE_STATE" = "current" ] && [ -x "$bin" ]; then
     skip "witness -> already built"
   else
-    spin_start "compiling witness (CGO off, single static binary)"
-    if run make -C "$dir" build; then
-      spin_stop
+    if run_quiet "compiling witness (CGO off, single static binary)" \
+      make -C "$dir" build; then
       ok "witness -> built"
     else
-      spin_stop
-      warn "witness -> build failed; skipping the link"
+      warn "witness -> build failed; its output is above. Skipping the link."
       return 0
     fi
   fi
@@ -303,13 +301,11 @@ tool_manifold() {
   if [ "$CLONE_STATE" = "current" ] && [ -d "$saver" ]; then
     skip "manifold -> already built"
   else
-    spin_start "compiling Manifold.saver (universal, ~30s)"
-    if run bash "$dir/scripts/build.sh"; then
-      spin_stop
+    if run_quiet "compiling Manifold.saver (universal, ~30s)" \
+      bash "$dir/scripts/build.sh"; then
       ok "manifold -> built"
     else
-      spin_stop
-      warn "manifold -> build failed; nothing installed"
+      warn "manifold -> build failed; its output is above. Nothing installed."
       return 0
     fi
   fi

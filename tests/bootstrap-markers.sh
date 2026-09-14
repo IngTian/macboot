@@ -40,7 +40,6 @@ FAKE_ROOT="$SCRATCH/root"
 FAKE_HOME="$SCRATCH/home"
 STATE="$FAKE_HOME/.macboot/state"
 _cleanup() {
-  spin_stop
   [ "$FAIL_N" -gt 0 ] || rm -rf "$SCRATCH"
 }
 trap _cleanup EXIT
