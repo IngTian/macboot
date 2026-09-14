@@ -36,11 +36,9 @@ FAKE_HOME="$SCRATCH/home"
 TRANSCRIPT="$SCRATCH/transcript.txt" # stderr: all narration
 STDOUT_FILE="$SCRATCH/stdout.txt"    # stdout: the machine-readable channel
 mkdir -p "$FAKE_HOME"
-# Chained rather than replaced: common.sh installs `trap spin_stop EXIT`, and
-# replacing it leaves a spinner process alive on any early exit. The scratch tree
+# The scratch tree
 # is kept on failure -- the leaked files are the evidence.
 _cleanup() {
-  spin_stop
   [ "$FAIL_N" -gt 0 ] || rm -rf "$SCRATCH"
 }
 trap _cleanup EXIT
@@ -68,11 +66,9 @@ step "plan a full dry run into an empty scratch home"
 # documented output as a leaked mutation. The purity question is about the narration,
 # so the transcript is the narration.
 _rc=0
-spin_start "bootstrap.sh --dry-run"
 MACBOOT_HOME="$FAKE_HOME" DRY_RUN=1 NO_COLOR=1 \
   bash "$MACBOOT_ROOT/bootstrap.sh" --dry-run --keep-going \
   >"$STDOUT_FILE" 2>"$TRANSCRIPT" || _rc=$?
-spin_stop
 
 if [ "$_rc" = 0 ]; then
   ok "dry run exited 0 ($(wc -l <"$TRANSCRIPT" | tr -d ' ') transcript lines)"
@@ -126,10 +122,9 @@ _VERBS="$_VERBS|brew|installer|softwareupdate|xcode-select|chsh|sudo|mas|open|os
 _VERBS="$_VERBS|curl|wget|npm|nvm|node|rustup|cargo|uv|pip|pip3|gem|claude|ollama"
 
 _WOULD="$(grep -c '^[[:space:]]*would ' "$TRANSCRIPT" || true)"
-# Lines ending in "..." are spin_start's non-TTY fallback, whose label is usually
-# the command it is about to wrap ("uv python install 3.13 ..."). Measured: that
-# form is 1 of the 2 shapes this pattern would otherwise flag on a healthy run,
-# and a real echoed command does not end in an ellipsis.
+# The trailing-ellipsis exclusion is belt and braces. It used to filter the spinner's
+# non-TTY fallback line, which no longer exists, but a label ending in "..." is still
+# narration rather than an echoed command, and this pattern cannot tell the two apart.
 _BARE="$(grep -nE "^[[:space:]]{0,2}(sudo[[:space:]]+)?(/[A-Za-z0-9_.-]+)*/?($_VERBS)([[:space:]]|$)" \
   "$TRANSCRIPT" | grep -vE '\.\.\.[[:space:]]*$' || true)"
 

@@ -29,7 +29,6 @@ want() {
 
 SCRATCH="$(mktemp -d "$MACBOOT_TEST_TMP/macboot-helpers.XXXXXX")"
 _cleanup() {
-  spin_stop
   [ "$FAIL_N" -gt 0 ] || rm -rf "$SCRATCH"
 }
 trap _cleanup EXIT

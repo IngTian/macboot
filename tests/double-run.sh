@@ -59,10 +59,8 @@ SCRATCH="$(mktemp -d "$MACBOOT_TEST_TMP/macboot-double.XXXXXX")"
 PROBE_HOME="$SCRATCH/probe"
 REAL_HOME="$SCRATCH/home"
 mkdir -p "$PROBE_HOME" "$REAL_HOME"
-# Chained: common.sh installs `trap spin_stop EXIT`, and replacing it strands a
-# spinner. The tree is kept on failure -- the snapshot diff is the evidence.
+# The tree is kept on failure -- the snapshot diff is the evidence.
 _cleanup() {
-  spin_stop
   [ "$FAIL_N" -gt 0 ] || rm -rf "$SCRATCH"
 }
 trap _cleanup EXIT

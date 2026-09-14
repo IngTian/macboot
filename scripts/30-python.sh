@@ -92,17 +92,19 @@ install_uv() {
   # line to .zshrc/.zshenv, next to the one shell/conf.d/00-path.zsh already
   # assembles. Two writers, one PATH, and the duplicate reappears on every re-run
   # because it is outside any macboot fence.
-  spin_start "downloading and running the uv installer"
-  if ! run bash -c 'set -euo pipefail
+  # The single quotes are deliberate: $1/$2/$3 are the INNER bash's positional parameters,
+  # supplied as the arguments after the script. shellcheck could follow that while the
+  # command read `run bash -c ...`, because `bash` was then the first word it saw; with a
+  # label in between it can no longer tell, so the intent is stated instead.
+  # shellcheck disable=SC2016
+  if ! run_quiet "the uv installer" bash -c 'set -euo pipefail
     curl -fsSL --retry 3 "$1" |
       env HOME="$2" UV_INSTALL_DIR="$3" INSTALLER_NO_MODIFY_PATH=1 sh' \
     macboot-uv "$UV_INSTALLER_URL" "$MACBOOT_HOME" "$UV_BIN_DIR"; then
-    spin_stop
     die "the uv installer failed. uv is the only Python manager this bootstrap
-     installs, so nothing later can paper over it. Check network/proxy, then:
+     installs, so nothing later can paper over it. Its output is above. Then:
        curl -fsSL $UV_INSTALLER_URL | less    # read it before running it"
   fi
-  spin_stop
 
   if [ "$DRY_RUN" = "1" ]; then
     return 0
@@ -172,18 +174,27 @@ install_python() {
   # against conda's interpreter (seen in the wild -- a pyvenv.cfg reading `uv = 0.11.16`
   # with `home = .../miniconda/base/bin`). Putting uv's own python first stops that.
   #
-  # One opaque ~30 MB download and unpack, no incremental output worth showing.
-  spin_start "uv python install --default $MACBOOT_PYTHON"
-  if ! run env HOME="$MACBOOT_HOME" "$uv" python install --default "$MACBOOT_PYTHON"; then
-    spin_stop
+  # --preview-features python-install-default acknowledges what uv itself says: on uv
+  # 0.11.16 `--default` prints "The `--default` option is experimental and may change
+  # without warning". Passing the feature flag is uv's documented way to say "yes, I know",
+  # and it silences a line that is a note to macboot's author, not to macboot's user.
+  # If uv ever promotes the flag this becomes a no-op; if uv ever removes it, the install
+  # fails loudly here rather than quietly reverting to a versioned-only shim.
+  #
+  # One opaque ~30 MB download and unpack, so run_quiet: uv draws its own progress meter,
+  # and two writers on one line is what produced
+  #   "| uv python install --default 3.13Installed Python 3.13.13 in 4.05s"
+  # when a spinner was redrawing underneath it.
+  if ! run_quiet "uv python install $MACBOOT_PYTHON" \
+    env HOME="$MACBOOT_HOME" "$uv" python install --default \
+    --preview-features python-install-default "$MACBOOT_PYTHON"; then
     # Not fatal: uv itself is installed and every project can still pin its own
     # interpreter on first `uv sync`. Only the pre-warmed default is missing.
     warn "uv could not install CPython $MACBOOT_PYTHON. uv is fine; the first
      'uv sync' in any project will fetch an interpreter itself."
     return 0
   fi
-  spin_stop
-  ok_live "CPython $MACBOOT_PYTHON installed under uv's control"
+  ok_live "CPython $MACBOOT_PYTHON installed under uv's control (python, python3, python$MACBOOT_PYTHON)"
 }
 
 # Guidance, not action. A bootstrap that pre-creates venvs guesses wrong twice:

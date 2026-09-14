@@ -207,16 +207,12 @@ install_plugins() {
     return 0
   fi
 
-  # One long opaque operation (clone plus install), so one spinner. spin_stop is
-  # on both branches: an unstopped spinner survives the module and keeps drawing
-  # over the next one's output.
-  spin_start "installing $PLUGIN"
-  if run claude plugin install "$PLUGIN"; then
-    spin_stop
+  # One long opaque operation (clone plus install), and `claude` narrates it. run_quiet
+  # keeps that narration in a log and surfaces it only if the install fails.
+  if run_quiet "installing $PLUGIN" claude plugin install "$PLUGIN"; then
     ok "plugin $PLUGIN"
   else
-    spin_stop
-    warn "'claude plugin install $PLUGIN' failed; run it by hand to see the error"
+    warn "'claude plugin install $PLUGIN' failed; its output is above"
   fi
 }
 

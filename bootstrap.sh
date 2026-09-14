@@ -13,7 +13,7 @@ set -euo pipefail
 # into every later module. The cost is that MACBOOT_CHANGED lives in the child, so
 # each module reports its counters and its warnings back through a scratch FILE
 # ($_TALLY below) that finish() totals. A file and not a pipe: piping a module's
-# output would cost it the tty, and with it the colour, the spinner and the bar.
+# output would cost it the tty, and with it the colour.
 # Before that, bootstrap's closing line counted only what bootstrap itself wrote
 # and cheerfully printed "0 warnings" after five warnings had scrolled past.
 
@@ -110,17 +110,17 @@ export MACBOOT_YES MACBOOT_OPTIONAL MACBOOT_MYTOOLS
 
 STATE_DIR="$MACBOOT_HOME/.macboot/state"
 
+# When the run started, for the one line of progress information worth printing after the
+# fact. A first `make all` is minutes of Homebrew; a re-run is seconds. Being told which of
+# those just happened is the difference between "it worked" and "did it do anything?"
+_RUN_STARTED_AT=$(date +%s)
+
 # Where children report their counters and their warnings. Passed per invocation below
 # rather than exported, so bootstrap's OWN warn() calls do not also land in the replay --
 # they are already three lines above the closing line, and duplicating them makes
 # tests/bootstrap-markers.sh's `grep -c '20-beta exited 3'` read 2.
-# When the run started, for the one line of progress information that is worth printing
-# after the fact. A first `make all` is minutes of Homebrew; a re-run is seconds. Being told
-# which of those just happened is the difference between "it worked" and "did it do anything?"
-_RUN_STARTED_AT=$(date +%s)
-
 _TALLY="${TMPDIR:-/tmp}/macboot-tally.$$"
-trap 'spin_stop; rm -f "$_TALLY" "$_TALLY.warn"' EXIT
+trap 'rm -f "$_TALLY" "$_TALLY.warn"' EXIT
 
 # Declared here, not at the module loop: finish() reads it, and finish() is also called
 # from the "nothing to run" path above the loop, where `set -u` would abort on an unset
@@ -334,7 +334,7 @@ mark_done() {
   return 0
 }
 
-trap 'spin_stop; printf "\ninterrupted — finished modules are marked, re-run to resume\n" >&2; exit 130' INT
+trap 'printf "\ninterrupted — finished modules are marked, re-run to resume\n" >&2; exit 130' INT
 
 # Where the tools macboot installs will be, resolved once. brew_prefix() shells out to
 # `brew --prefix` when brew already exists and otherwise answers from the arch, which is

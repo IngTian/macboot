@@ -105,17 +105,17 @@ install_nvm() {
   # -f so a 404 page is not handed to bash. PROFILE=/dev/null stops the installer
   # appending its OWN nvm block to .zshrc: that copy is outside any macboot fence,
   # so ensure_block cannot see it and the machine ends up sourcing nvm twice.
-  spin_start "installing nvm $NVM_VERSION"
-  if ! run bash -c 'set -euo pipefail
+  # Single quotes deliberate: $1/$2/$3 are the INNER bash's positional parameters, given as
+  # the arguments after the script. See the same note in scripts/30-python.sh.
+  # shellcheck disable=SC2016
+  if ! run_quiet "the nvm installer" bash -c 'set -euo pipefail
     curl -fsSL --retry 3 "$1" |
       env HOME="$2" NVM_DIR="$3" PROFILE=/dev/null bash' \
     macboot-nvm "$NVM_INSTALLER_URL" "$MACBOOT_HOME" "$MACBOOT_NVM_DIR"; then
-    spin_stop
     die "the nvm installer failed ($NVM_INSTALLER_URL). Everything below needs it,
      and a machine with no node breaks the Claude Code hooks this bootstrap
-     installs. Check the network, or edit NVM_VERSION in scripts/40-node.sh."
+     installs. Its output is above. Or edit NVM_VERSION in scripts/40-node.sh."
   fi
-  spin_stop
   ok_live "nvm $NVM_VERSION -> $MACBOOT_NVM_DIR"
 }
 
@@ -160,18 +160,17 @@ install_node_lts() {
   # `default -> lts/*`, not a concrete version: a later `nvm install --lts` then
   # moves the default forward by itself. The symlinks below still name a concrete
   # directory, so re-run this module after a node upgrade to re-point them.
-  spin_start "nvm install --lts (downloads a node tarball)"
-  if ! run bash -c 'set -eu
+  # Single quotes deliberate, as above: $1/$2 are the inner bash's positional parameters.
+  # shellcheck disable=SC2016
+  if ! run_quiet "nvm install --lts (downloads a node tarball)" bash -c 'set -eu
     export NVM_DIR="$1" HOME="$2"
     . "$NVM_DIR/nvm.sh"
     nvm install --lts
     nvm alias default "lts/*"' \
     macboot-nvm-node "$MACBOOT_NVM_DIR" "$MACBOOT_HOME"; then
-    spin_stop
     die "nvm install --lts failed; no node was installed, so the symlink step
      below would link nothing and the verification would fail confusingly"
   fi
-  spin_stop
   ok_live "node LTS installed, alias default -> lts/*"
 }
 

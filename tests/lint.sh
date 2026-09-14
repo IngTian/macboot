@@ -25,9 +25,7 @@ SHFMT="${SHFMT:-shfmt}"
 DRY_RUN=0
 
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/macboot-lint.XXXXXX")"
-# Chained, not replaced: common.sh installs `trap spin_stop EXIT` and dropping it
-# here would leave a spinner alive on any early exit.
-trap 'spin_stop; rm -rf "$TMPD"' EXIT
+trap 'rm -rf "$TMPD"' EXIT
 
 # Pruned paths: .git, and the scratch trees the other two tests may leave behind
 # (tmp/, fakehome/, .macboot/ are all in .gitignore for exactly that reason).

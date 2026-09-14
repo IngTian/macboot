@@ -33,10 +33,9 @@ DRY_RUN="${DRY_RUN:-0}"
 #: Scratch file where a module reports its counters and its warning text back to
 #: bootstrap.sh, which runs modules as CHILD processes and therefore cannot see their
 #: MACBOOT_* counters. Without it the closing line said "0 warnings" directly after five
-#: warnings had scrolled past. A file rather than a pipe: piping a module's output costs
-#: it the tty, and with it the colour and the spinner. Empty when a
-#: module is run on its own, and deliberately NOT under $MACBOOT_HOME -- a dry run must
-#: leave that untouched.
+#: warnings had scrolled past. A file rather than a pipe: piping a module's output would
+#: cost it the tty and with it the colour. Empty when a module is run on its own, and
+#: deliberately NOT under $MACBOOT_HOME -- a dry run must leave that untouched.
 MACBOOT_TALLY="${MACBOOT_TALLY:-}"
 
 #: 1 = suppress the colour codes (also auto-off when stderr is not a tty).
@@ -85,10 +84,9 @@ MACBOOT_WARNED=0
 # can pipe stdout without swallowing the narration.
 # ---------------------------------------------------------------------------
 
-# _tty -- is stderr a terminal? The spinner checks this: a redrawn spinner written into a
-# CI log or a pipe produces thousands of lines of escape-code noise and hides the one line
-# that mattered.
-_tty() { [ -t 2 ]; }
+# No _tty() helper. It existed for exactly two callers, the progress bar and the spinner,
+# and both are gone; the one remaining tty question -- whether to emit colour -- is asked
+# once at the top of this file instead of per call.
 
 # Glyphs degrade to ASCII when the locale cannot promise UTF-8, and this genuinely changes
 # the bytes written: LC_ALL=C emits `> arrow / ok check / -- dot` where a UTF-8 locale emits
@@ -189,46 +187,9 @@ step_end() {
   _STEP_LABEL=''
 }
 
-# spin_start <label> / spin_stop -- an indeterminate spinner for one long opaque
-# operation (a Homebrew install, a clone). Only when interactive: a background
-# spinner writing into a pipe never terminates cleanly and fills the log.
-#
-# The PID is tracked in a variable rather than with job control because job control
-# is disabled in non-interactive shells, so `%1` is not addressable here.
-_SPIN_PID=''
-spin_start() {
-  _tty || {
-    printf '  %s%s ...%s\n' "$_C_DIM" "$1" "$_C_RESET" >&2
-    return 0
-  }
-  [ "$DRY_RUN" = "1" ] && return 0
-  (
-    # Double-quoted with an escaped backslash: in single quotes shellcheck reads the
-    # trailing backslash as an attempt to escape the closing quote (SC1003).
-    frames="|/-\\"
-    i=0
-    while :; do
-      f=$(printf '%s' "$frames" | cut -c $((i % 4 + 1)))
-      printf '\r  %s%s%s %s' "$_C_BLUE" "$f" "$_C_RESET" "$1" >&2
-      i=$((i + 1))
-      sleep 0.1
-    done
-  ) &
-  _SPIN_PID=$!
-}
-spin_stop() {
-  [ -n "$_SPIN_PID" ] || return 0
-  kill "$_SPIN_PID" 2>/dev/null || true
-  wait "$_SPIN_PID" 2>/dev/null || true
-  _SPIN_PID=''
-  printf '\r%-72s\r' '' >&2
-}
-
-# Kill the spinner on any exit path. Without this, an interrupted run leaves a
-# background process spinning forever on a shell the user has already left.
-#
-# INT and TERM RE-RAISE the signal after cleaning up; they used to share the EXIT
-# handler, and a bash trap handler that simply returns does NOT terminate the script.
+# INT and TERM RE-RAISE the signal. They used to share an EXIT handler whose only job was
+# stopping a spinner, and a bash trap handler that simply returns does NOT terminate the
+# script.
 # So Ctrl-C was swallowed outright: the module resumed at the next command and ran every
 # remaining mutation to completion. Measured through a real pty -- ^C at mutation 3 of 12
 # left all 12 on disk, and stripping this one line made the same run stop at 3. On a real
@@ -239,9 +200,11 @@ spin_stop() {
 # was never reached, so a module that fully succeeded re-ran anyway -- the opposite of
 # what that message promises. Resetting to the default disposition before re-raising is
 # what makes the shell die FROM the signal instead of recursing into this handler.
-trap 'spin_stop' EXIT
-trap 'spin_stop; trap - INT; kill -INT $$' INT
-trap 'spin_stop; trap - TERM; kill -TERM $$' TERM
+# No EXIT trap here any more: with the spinner gone there is nothing of common.sh's to
+# clean up, so callers own EXIT outright instead of having to chain onto one of ours --
+# which four test files each carried a comment about doing correctly.
+trap 'trap - INT; kill -INT $$' INT
+trap 'trap - TERM; kill -TERM $$' TERM
 
 # die() exits non-zero. Modules should die on "the machine is not in a state I can
 # safely change" and warn on "this one optional thing is unavailable" -- a bootstrap
@@ -274,6 +237,55 @@ run() {
   fi
   MACBOOT_CHANGED=$((MACBOOT_CHANGED + 1))
   "$@"
+}
+
+# run_quiet <label> <command...> -- run() for a long, NOISY command, with macboot owning
+# the terminal instead of the tool.
+#
+# Forty lines of "==> Fetching / ==> Downloading / ==> Pouring" from four different tools in
+# one transcript is noise a reader has to filter by eye. So the output goes to a log, the
+# caller prints one line, and the log is shown ONLY when it becomes evidence.
+#
+# CAPTURED, NOT HIDDEN, and the distinction is the whole design:
+#   * on failure the last lines are printed and the log is KEPT and named. brew's own error
+#     tells you which build failed and where its logs are, and that is usually the only
+#     actionable thing in the run.
+#   * `==> Caveats` is always surfaced. It is the one part of brew's output that is
+#     instructions rather than progress -- "you must add this to your PATH" belongs on screen.
+#   * on success the log is deleted. Nothing accumulates.
+#
+# stdin comes from /dev/null ON PURPOSE, and it is the load-bearing line. Capturing output
+# makes any prompt INVISIBLE, and this repo has been bitten by exactly that twice: a spinner
+# painted over the Homebrew installer's sudo prompt (10-brew.sh) and over git's credential
+# prompt (80-mytools.sh), and both times the user watched an animation forever with no
+# question on screen. With no stdin a command that wants input FAILS immediately and its
+# error lands in the log, which is recoverable. An invisible wait is not.
+#
+# So this must never wrap something that legitimately needs a human: the Homebrew installer
+# itself stays unredirected for that reason.
+run_quiet() {
+  local _rq_label _rq_log _rq_rc
+  _rq_label="$1"
+  shift
+  if [ "$DRY_RUN" = "1" ]; then
+    run "$@"
+    return 0
+  fi
+  _rq_log="$(mktemp "${TMPDIR:-/tmp}/macboot-out.XXXXXX")" || _rq_log=/dev/null
+  _rq_rc=0
+  run "$@" >"$_rq_log" 2>&1 </dev/null || _rq_rc=$?
+
+  if [ "$_rq_rc" != 0 ]; then
+    warn "$_rq_label failed (exit $_rq_rc). Last 15 lines, full output kept at $_rq_log:"
+    tail -15 "$_rq_log" 2>/dev/null | sed 's/^/     /' >&2
+    return "$_rq_rc"
+  fi
+  if grep -q '^==> Caveats' "$_rq_log" 2>/dev/null; then
+    log "caveats from $_rq_label:"
+    sed -n '/^==> Caveats/,$p' "$_rq_log" | head -20 | sed 's/^/     /' >&2
+  fi
+  rm -f "$_rq_log"
+  return 0
 }
 
 # has <command> -- is it on PATH? Read-only, so it never goes through run().
