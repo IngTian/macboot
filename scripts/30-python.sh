@@ -84,9 +84,9 @@ install_uv() {
   # which is what makes the curl half of the pipe able to fail the run at all.
   #
   # INSTALLER_NO_MODIFY_PATH: the installer would otherwise append its own PATH
-  # line to .zshrc/.zshenv, next to the one shell/zshrc already assembles. Two
-  # writers, one PATH, and the duplicate reappears on every re-run because it is
-  # outside any macboot fence.
+  # line to .zshrc/.zshenv, next to the one shell/conf.d/00-path.zsh already
+  # assembles. Two writers, one PATH, and the duplicate reappears on every re-run
+  # because it is outside any macboot fence.
   spin_start "downloading and running the uv installer"
   if ! run bash -c 'set -euo pipefail
     curl -fsSL --retry 3 "$1" |

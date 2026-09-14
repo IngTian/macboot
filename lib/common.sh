@@ -30,7 +30,16 @@ MACBOOT_COMMON_SOURCED=1
 #: 1 = print what would happen and change nothing. Set by --dry-run.
 DRY_RUN="${DRY_RUN:-0}"
 
-#: 1 = suppress the colour codes (also auto-off when stdout is not a tty).
+#: Scratch file where a module reports its counters and its warning text back to
+#: bootstrap.sh, which runs modules as CHILD processes and therefore cannot see their
+#: MACBOOT_* counters. Without it the closing line said "0 warnings" directly after five
+#: warnings had scrolled past. A file rather than a pipe: piping a module's output costs
+#: it the tty, and with it the colour, the spinner and the progress bar. Empty when a
+#: module is run on its own, and deliberately NOT under $MACBOOT_HOME -- a dry run must
+#: leave that untouched.
+MACBOOT_TALLY="${MACBOOT_TALLY:-}"
+
+#: 1 = suppress the colour codes (also auto-off when stderr is not a tty).
 NO_COLOR="${NO_COLOR:-0}"
 
 #: Where this checkout lives. Modules use it to find Brewfile, apps.tsv, etc.
@@ -43,7 +52,13 @@ MACBOOT_HOME="${MACBOOT_HOME:-$HOME}"
 #: together instead of scattering across seconds.
 MACBOOT_STAMP="${MACBOOT_STAMP:-$(date +%Y%m%d-%H%M%S)}"
 
-if [ -t 1 ] && [ "$NO_COLOR" != "1" ]; then
+# Gated on stderr, not stdout, because that is where every coloured write in this repo
+# goes: `grep -rn '_C_' lib scripts bootstrap.sh` is all `>&2`. With `[ -t 1 ]` a run
+# redirected as `./bootstrap.sh 2>run.log` still saw a terminal on the bare stdout side
+# and wrote escape codes into the log, while `./bootstrap.sh >out.txt` stripped the colour
+# from a transcript still going to the screen -- exactly backwards in both directions.
+# One test here fixes log, ok, skip, warn, step, step_end, die, banner and summary at once.
+if [ -t 2 ] && [ "$NO_COLOR" != "1" ]; then
   _C_RESET=$'\033[0m'
   _C_DIM=$'\033[2m'
   _C_RED=$'\033[31m'
@@ -91,6 +106,12 @@ skip() {
 warn() {
   MACBOOT_WARNED=$((MACBOOT_WARNED + 1))
   printf '  %s!%s %s\n' "$_C_YELLOW" "$_C_RESET" "$*" >&2
+  # Kept for the closing replay. Warnings are the only output a user must act on, and in
+  # a ten-module run they are hundreds of lines above the last screen. The `return 0` is
+  # load-bearing: without it a failed append makes warn() the last command of a `&&`
+  # chain under `set -e` and kills the caller.
+  [ -n "$MACBOOT_TALLY" ] && printf 'W %s\n' "$*" >>"$MACBOOT_TALLY.warn"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -99,34 +120,49 @@ warn() {
 # captures stays greppable.
 # ---------------------------------------------------------------------------
 
-#: Total number of steps, set once by bootstrap.sh so `step` can render "[3/9]".
+#: The running module's position in the run, and how many modules are in it. Both come
+#: from bootstrap.sh's environment: modules are child processes that re-source this file,
+#: so `step` cannot keep a counter of its own.
+#:
+#: MACBOOT_STEP_N is the MODULE index, NOT a step count, and the distinction is the whole
+#: bug this pair has had twice. A module's step count is unknown before it runs, so
+#: counting steps against a module total made the numerator and the denominator different
+#: units: a full run rendered [1/10] [2/10] [2/10] [3/10] [3/10] [4/10] [5/10] [4/10] ...
+#: -- 21 renders for 10 modules, going backwards at 5->4 and reaching [12/10] inside
+#: 80-mytools, while 99-apps (which calls step zero times) meant [10/10] never printed at
+#: all. An earlier comment here claimed that exact class of bug was already fixed, which
+#: made it a false all-clear over live wrong output.
 MACBOOT_STEP_TOTAL="${MACBOOT_STEP_TOTAL:-0}"
-
-#: Steps already completed by EARLIER modules. Inherited, not reset: bootstrap.sh
-#: runs each module as a child process that re-sources this file, so hardcoding 0
-#: here made its `export MACBOOT_STEP_N=<offset>` dead code and every module
-#: restarted the count -- module 6 of 11 rendered "[1/11]", and a reader at "[4/11]"
-#: was really six modules in, with numerator and denominator counting different
-#: things.
 MACBOOT_STEP_N="${MACBOOT_STEP_N:-0}"
 _STEP_STARTED_AT=0
 _STEP_LABEL=''
 
 # banner -- the one-time header. Prints the mode, because someone reading a
 # scrollback needs to know whether what follows actually happened.
+#
+# Pure ASCII, and that is the point rather than the joke: the box-drawing header this
+# replaces hardcoded U+250C/2500/2502/2514 with no locale check, so under LC_ALL=C it
+# rendered as mojibake -- the exact failure the glyph table above exists to prevent, in
+# the very first thing the tool prints. ASCII art needs no second code path, so there is
+# nothing here to fall out of sync. 51 columns at its widest.
 banner() {
   local mode
   mode='live'
-  [ "$DRY_RUN" = "1" ] && mode='dry run — nothing will be changed'
-  printf '\n%s┌─ macboot ─────────────────────────────────────────────%s\n' "$_C_BLUE" "$_C_RESET" >&2
-  printf '%s│%s  %s\n' "$_C_BLUE" "$_C_RESET" "$mode" >&2
-  printf '%s└───────────────────────────────────────────────────────%s\n\n' "$_C_BLUE" "$_C_RESET" >&2
+  [ "$DRY_RUN" = "1" ] && mode='dry run - nothing will be changed'
+  printf '\n%s   ^__^%s          macboot\n' "$_C_BLUE" "$_C_RESET" >&2
+  printf '%s   (oo)\\_______%s   %s%s%s\n' "$_C_BLUE" "$_C_RESET" "$_C_DIM" "$mode" "$_C_RESET" >&2
+  printf '%s   (__)\\       )\\/\\%s\n' "$_C_BLUE" "$_C_RESET" >&2
+  printf '%s       ||----w ||%s\n\n' "$_C_BLUE" "$_C_RESET" >&2
 }
 
-# step <label> -- begin a numbered step. Closes the previous one's timing.
+# step <label> -- begin a step of the current module. Closes the previous one's timing.
+#
+# The "[n/total]" prefix is not decoration: tests/dry-run-purity.sh flags any column-0
+# line whose first word is a mutating verb, and labels like "nvm v0.40.1" and
+# "uv (vendor installer, not Homebrew)" clear that scan only because of the prefix.
+# No increment here -- the number is the module's position, which bootstrap.sh owns.
 step() {
   [ -n "$_STEP_LABEL" ] && step_end
-  MACBOOT_STEP_N=$((MACBOOT_STEP_N + 1))
   _STEP_LABEL="$1"
   _STEP_STARTED_AT=$(date +%s)
   if [ "$MACBOOT_STEP_TOTAL" -gt 0 ]; then
@@ -512,18 +548,26 @@ require_macos() {
   [ "$(uname -s)" = "Darwin" ] || die "macboot is macOS only (found $(uname -s))"
 }
 
-# summary -- the closing box. changed=0 on a second consecutive run is the whole
+# summary -- the closing line. changed=0 on a second consecutive run is the whole
 # idempotency claim, so print it every time rather than only on request.
 #
 # Warnings are counted and echoed here because a warning 200 lines up scrolls away.
 # A bootstrap whose problems are only visible mid-transcript trains people to ignore
 # the transcript.
+#
+# One line, not a three-line box: this is called 15+ times in a full run (every module,
+# bootstrap twice, every test), so the boxes were 44 of `make plan`'s 281 lines. The cow
+# carries the signal that the box's colour used to -- yellow if anything warned, green if
+# anything changed, dim on a clean changed=0 re-run -- and being ASCII it also survives
+# LC_ALL=C, which the box's `┌ │ └` did not.
 summary() {
   local name tail_note col
   step_end
   name="${1:-macboot}"
   tail_note=''
-  [ "$DRY_RUN" = "1" ] && tail_note='  (dry run — nothing was changed)'
+  # Short, and ASCII: banner() already said "dry run - nothing will be changed", and the
+  # em-dash here was the last non-ASCII byte in an entire C-locale transcript.
+  [ "$DRY_RUN" = "1" ] && tail_note='  (dry run)'
 
   if [ "$MACBOOT_WARNED" -gt 0 ]; then
     col="$_C_YELLOW"
@@ -533,12 +577,14 @@ summary() {
     col="$_C_DIM"
   fi
 
-  printf '\n%s┌─ %s ─%s\n' "$col" "$name" "$_C_RESET" >&2
-  printf '%s│%s  %s%s%s changed   %s%s%s skipped   %s%s%s warnings%s\n' \
-    "$col" "$_C_RESET" \
+  # Report the counters up to whoever ran this module, if anyone is listening.
+  [ -n "$MACBOOT_TALLY" ] && printf '%s %s %s\n' \
+    "$MACBOOT_CHANGED" "$MACBOOT_SKIPPED" "$MACBOOT_WARNED" >>"$MACBOOT_TALLY"
+
+  printf '\n%s   ^__^ (oo)%s %s%s:%s %s%s%s changed  %s%s%s skipped  %s%s%s warnings%s\n' \
+    "$col" "$_C_RESET" "$_C_DIM" "$name" "$_C_RESET" \
     "$_C_GREEN" "$MACBOOT_CHANGED" "$_C_RESET" \
     "$_C_DIM" "$MACBOOT_SKIPPED" "$_C_RESET" \
     "$([ "$MACBOOT_WARNED" -gt 0 ] && printf '%s' "$_C_YELLOW" || printf '%s' "$_C_DIM")" \
     "$MACBOOT_WARNED" "$_C_RESET" "$tail_note" >&2
-  printf '%s└─%s\n' "$col" "$_C_RESET" >&2
 }

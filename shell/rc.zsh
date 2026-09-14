@@ -18,7 +18,7 @@
 #
 # Interactive-only: zsh reads ~/.zshrc for interactive shells, so nothing loaded from
 # here is visible to `zsh -c '...'`. Exports a non-interactive shell must see (node,
-# for Claude Code's hooks) belong in ~/.zprofile and are 40-node.sh's problem.
+# for Claude Code's hooks) belong in ~/.zshenv and are 40-node.sh's problem.
 
 # Sourcing this twice runs compinit twice and double-registers zsh-autosuggestions'
 # ZLE widgets, which shows up as suggestions being accepted twice per keystroke.

@@ -31,8 +31,8 @@ NVM_INSTALLER_URL="${NVM_INSTALLER_URL:-https://raw.githubusercontent.com/nvm-sh
 #: MACBOOT_HOME=/tmp/scratch test at the real ~/.nvm and install for real.
 MACBOOT_NVM_DIR="${MACBOOT_NVM_DIR:-$MACBOOT_HOME/.nvm}"
 
-#: Already first in PATH for interactive shells (shell/zshrc); the fence written
-#: below is what puts it in PATH for the non-interactive ones.
+#: Already first in PATH for interactive shells (shell/conf.d/00-path.zsh); the
+#: fence written below is what puts it in PATH for the non-interactive ones.
 LOCAL_BIN="${LOCAL_BIN:-$MACBOOT_HOME/.local/bin}"
 
 usage() {
@@ -184,7 +184,7 @@ expose_noninteractive() {
   # alone stay invisible to exactly the shells this module exists to fix. .zshenv is
   # the one startup file EVERY zsh reads. For login shells /etc/zprofile's
   # path_helper then moves the entry to the end of PATH; it keeps it, which is all
-  # `command -v` needs, and shell/zshrc's interactive prepend is what still puts
+  # `command -v` needs, and 00-path.zsh's interactive prepend is what still puts
   # ~/.local/bin ahead of /usr/bin's python3 at a prompt. The case guard is what
   # stops PATH growing one copy per nested shell.
   ensure_block "$MACBOOT_HOME/.zshenv" node-path <<'EOF'

@@ -91,6 +91,16 @@ jobs:
         env:
           MACBOOT_TEST_TMP: ${{ runner.temp }}
         run: bash tests/bootstrap-markers.sh
+      # In this job rather than its own: same runner, no tools needed, and both are about
+      # lib/common.sh and bootstrap.sh rather than about a module. It covers the two
+      # paths that can destroy work -- ensure_block truncating a hand-edited ~/.zshrc,
+      # and the INT/TERM handler that decides whether Ctrl-C actually stops a module.
+      # Without it those ran only from `make test` on one laptop, so a PR could restore
+      # either bug and still get a green check.
+      - name: lib/common.sh data-loss and signal cases
+        env:
+          MACBOOT_TEST_TMP: ${{ runner.temp }}
+        run: bash tests/common-helpers.sh
 
   double-run:
     runs-on: macos-latest
