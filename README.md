@@ -43,7 +43,6 @@ Every module is standalone, runnable in any order, and safe to re-run.
 | `40-node` | nvm + node LTS — and node visible to *non-interactive* shells too |
 | `50-git` | git config, and it offers to set your name and email |
 | `55-github` | offers `gh auth login` — browser sign-in, and uploads an SSH key |
-| `60-macos` | 27 `defaults` — trackpad, Dock, Finder, screenshots, key repeat |
 | `70-claude` | Claude Code settings and one plugin |
 | `80-mytools` | four tools of mine, each asked for separately, all default to no |
 | `99-apps` | prints the GUI apps that are missing |
@@ -105,13 +104,15 @@ line was wrong; the file was.
 
 - **No secrets.** No keys, tokens or credentials, encrypted or otherwise.
 - **No cask installs.** See above.
-- **No MDM removal.** Preflight warns on a managed Mac and continues. Expect some
-  `defaults` to be reverted — that is the MDM working, not macboot failing.
+- **No MDM removal.** Preflight warns on a managed Mac and continues, because a managed
+  Mac may withhold the admin rights the Homebrew installer needs.
+- **No system preferences.** No Dock, Finder, trackpad or key-repeat `defaults`. An earlier
+  version wrote 27 of them; they are your taste to set, and `defaults(1)` talks to cfprefsd,
+  which ignores `MACBOOT_HOME` — so that was also the one module no test could sandbox.
 - **Not a backup or a migration tool.** It sets up a new Mac and never inspects an old one.
 
-And the honest caveat: this is one person's taste. The 27 `defaults` in `60-macos.sh` and
-the aliases in `70-aliases.zsh` are what *I* like, not advice. Fork it, or drop a file of
-your own on top.
+And the honest caveat: this is one person's taste. The aliases in `70-aliases.zsh` are what
+*I* like, not advice. Fork it, or drop a file of your own on top.
 
 ## Design notes
 
@@ -129,8 +130,8 @@ that runs before a package manager exists should not need one.
 `MACBOOT_ZSH_PROFILE=1 exec zsh`) prints the per-unit cost, so "my shell got slow" has an
 answer. The plugins dominate; the glob and the eight `source` calls are noise.
 
-**Three writers bypass `run()`.** Every mutation goes through one `run()` helper that
-consults one `DRY_RUN` flag — except `ensure_block`, `link_once` and `defaults_set` in
+**Two writers bypass `run()`.** Every mutation goes through one `run()` helper that
+consults one `DRY_RUN` flag — except `ensure_block` and `link_once` in
 `lib/common.sh`, which write through shell redirects and so check `DRY_RUN` themselves and
 update the same counters. `ensure_block` is the one that touches your `.zshrc`. Grepping
 for `run()` will not find them, which is why

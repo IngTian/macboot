@@ -16,15 +16,18 @@
 #                        cannot be undone by deleting a scratch directory.
 #   * 30-python 40-node  pipe a vendor installer into a shell (uv, nvm) and download
 #                        toolchains. Same reasons.
-#   * 60-macos           writes system `defaults`. cfprefsd is a per-user daemon, so
-#                        redirecting HOME does NOT contain it: the write lands in the
-#                        real user's preferences. Never in an automated test.
 #   * 70-claude          runs `claude plugin ...` against a live marketplace.
 #   * 80-mytools         clones and builds from the network.
 #   * anything that changes the login shell (chsh) -- interactive password prompt.
 #
-# So `defaults` idempotency and Homebrew idempotency are NOT covered here, by
-# anyone, ever: they stay a manual gate on a throwaway VM before a release tag.
+# `defaults` used to head that list: 60-macos wrote 27 of them, and cfprefsd resolves
+# the preference directory from the user record, so redirecting HOME did NOT contain it.
+# That module is gone -- system preferences are the user's to set -- which removes the
+# one mutation this harness could never sandbox. `defaults` stays in FORBIDDEN below so
+# a future module cannot quietly reintroduce it.
+#
+# Homebrew idempotency is still NOT covered here, by anyone, ever: it stays a manual
+# gate on a throwaway VM before a release tag.
 # What IS covered is the part that has actually broken in practice -- link_once
 # backing up its own symlink on every re-run, and ensure_block appending a second
 # copy of its fence instead of replacing the first.
@@ -111,8 +114,11 @@ eligible() {
     printf 'run() target is forbidden or is a variable the scanner cannot resolve\n'
     return 0
   fi
-  # defaults_set routes through run(), so the pattern above cannot see it, and
-  # cfprefsd writes to the real user's preferences whatever HOME says.
+  # Kept deliberately after defaults_set was removed with 60-macos: this is the only
+  # check that would catch the helper coming back. A defaults_set would call
+  # `run defaults write` from lib/common.sh, not from the module, so the scanner above
+  # -- which reads the MODULE's lines -- cannot see it, while cfprefsd would write to
+  # the real user's preferences whatever HOME says. Four lines to keep that door shut.
   if code_lines "$_mod" | grep -q 'defaults_set'; then
     printf 'writes system defaults, which redirecting HOME does not contain\n'
     return 0
