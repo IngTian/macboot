@@ -1,0 +1,25 @@
+# macboot — nice-to-have formulae. Installed only by `make optional`, or by
+# `scripts/10-brew.sh --optional` / `MACBOOT_OPTIONAL=1`.
+#
+# Nothing in this file may be a prerequisite for another module. 10-brew.sh
+# therefore treats a failure here as a warning, not a fatal error: these are
+# personal taste, and a bootstrap that aborts because one renamed formula no
+# longer resolves is useless. If a script starts *needing* something here, move
+# the line to Brewfile instead of hoping the optional pass ran.
+#
+# Same rules as Brewfile: no `cask`, no `tap`.
+
+brew "fd"       # find with sane defaults and .gitignore awareness
+brew "bat"      # cat with syntax highlighting; paging is off in scripts via --style=plain
+brew "tree"     # one-screen directory shape, which `ls -R` is not
+brew "eza"      # ls replacement; kept optional because aliasing ls breaks scripts that parse it
+brew "yq"       # jq for the YAML half (GitHub workflows, compose files)
+brew "direnv"   # per-directory env; needs a shell hook, so it is opt-in on purpose
+brew "zoxide"   # frecency cd; overlaps autojump deliberately, pick one in .zshrc
+brew "tectonic" # self-contained LaTeX, so no 5 GB MacTeX for one paper
+brew "redis"    # local cache for experiments; installed, not started as a service
+brew "mkcert"   # locally-trusted TLS certs instead of clicking through browser warnings
+brew "p7zip"    # the archives macOS Archive Utility refuses to open
+brew "poppler"  # pdftotext/pdfimages for the paper pipeline
+brew "gifsicle" # screen-recording GIFs down to something attachable
+brew "cowsay"   # no defence offered

@@ -1,0 +1,100 @@
+# macboot — global git ignore, linked to ~/.config/git/ignore by scripts/50-git.sh
+# and pinned as core.excludesfile in git/gitconfig.
+#
+# Lowest precedence of all ignore sources: a repo's own .gitignore, its
+# .git/info/exclude and any deeper .gitignore all override what is here, so a
+# project that WANTS one of these files only has to say so (`!.idea/`). That is
+# also why this file stays short — a rule here applies to every repo on the disk,
+# including ones you clone from other people.
+
+# ---------------------------------------------------------------------------
+# The reason this file exists at all
+# ---------------------------------------------------------------------------
+
+# Claude Code writes .claude/settings.local.json into whatever directory you run
+# it in. It holds per-machine permission grants — local paths, allowed commands,
+# sometimes an approved curl target — and it is regenerated constantly, so it
+# shows up as a new untracked file in every repo you touch and eventually rides
+# along in a `git add -A`.
+#
+# On the source machine the ONLY thing preventing that was a 31-byte global
+# ignore, sitting at a path nobody would think to look at, holding this one line.
+# Losing that file would have been silent: nothing errors, the file just starts
+# appearing in `git status` again. It is therefore tracked here, first, with this
+# explanation attached.
+#
+# The `**/` is load-bearing. Per gitignore(5), a pattern containing a slash anywhere
+# except at the end is anchored to the ignore file's directory level -- and for
+# core.excludesFile that level is the TOP OF THE WORKING TREE. So the bare
+# `.claude/settings.local.json` matched only a repo root, and `sub/.claude/...` or
+# `apps/web/.claude/...` were NOT ignored (verified with `git check-ignore -v`). Since
+# running Claude Code from a subdirectory of a monorepo is the normal way it is used,
+# the one pattern this whole file exists for was failing in the common case. Every
+# other entry here (.idea/, .venv/, __pycache__/, node_modules/) has no internal slash
+# and so already matched at any depth.
+**/.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------------------
+
+# Finder writes one per directory it has ever displayed, including directories
+# inside a checkout you opened once to look at a screenshot.
+.DS_Store
+.DS_Store?
+
+# AppleDouble resource forks, created when a file is copied to a filesystem
+# without native xattr support (a USB stick, a network share) and copied back.
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# ---------------------------------------------------------------------------
+# Editor droppings
+# ---------------------------------------------------------------------------
+
+# JetBrains project metadata: absolute paths, local run configurations and a
+# per-user workspace.xml that conflicts on literally every merge.
+.idea/
+*.iml
+
+# vim swap files, present only while a buffer is open — long enough to be caught
+# by `git add -A` during an edit.
+*.swp
+*.swo
+.*.sw[a-p]
+*~
+
+# Deliberately NOT here: .vscode/. Ignoring a whole directory globally makes it
+# impossible for a repo to re-include a single file inside it (git cannot
+# re-include a path whose parent directory is excluded), and shared
+# .vscode/extensions.json or launch.json are worth committing. Repos that want
+# their .vscode private can say so in their own .gitignore.
+
+# ---------------------------------------------------------------------------
+# Language and tool caches — big, machine-specific, always regenerable
+# ---------------------------------------------------------------------------
+
+# uv creates .venv by convention. Committing one publishes absolute
+# interpreter paths and compiled wheels for exactly one machine and OS.
+.venv/
+venv/
+
+# Bytecode. Stale .pyc files that shadow a deleted module are a genuinely
+# confusing class of bug, and one you inflict on whoever clones the repo.
+__pycache__/
+*.py[cod]
+
+# Tool caches keyed to absolute paths on this machine.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# node_modules is per-platform (native addons) and reproducible from the lockfile,
+# which is the file that should be committed instead.
+node_modules/
+
+# direnv's materialised environment, not its .envrc.
+.direnv/

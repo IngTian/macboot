@@ -1,0 +1,174 @@
+# macboot CI.
+#
+# WHAT THIS DOES NOT COVER. Read this before trusting a green check:
+#
+#   * No casks and no GUI. `apps.tsv` is printed, never installed, so nothing here
+#     verifies that a cask name is still correct -- casks get renamed on someone
+#     else's schedule and CI would not notice.
+#   * The Raycast Cmd-Space swap CANNOT be tested. It is a nested
+#     com.apple.symbolichotkeys write that needs the pref daemon restarted and a
+#     logged-in session; it lives in notes/MANUAL-STEPS.md and stays unverified.
+#   * No system `defaults`, no Homebrew install, no login-shell change, no vendor
+#     installers (uv/nvm/rustup). tests/double-run.sh excludes those modules and
+#     says why per module; nothing else here runs them either. So Homebrew and
+#     `defaults` idempotency are asserted by no test at all.
+#   * A hosted runner is NOT a fresh personal Mac: Homebrew, git, node, python and
+#     the Xcode CLT are already installed, HOME is /Users/runner, the machine is
+#     not MDM-enrolled and there is no Time Machine destination to detect. Every
+#     "is it already there?" branch therefore takes the wrong side of the fork
+#     compared to the machine this repo is for.
+#
+# Fresh-machine verification stays a MANUAL gate -- a throwaway UTM/Tart VM, run
+# once before any release tag. This workflow only proves the shell is well-formed,
+# that --dry-run is inert, and that the home-scoped modules are idempotent.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      # `brew list || brew install`: `brew install` on an already-present formula
+      # is a slow no-op on a runner image that may ship shellcheck already.
+      - name: install shellcheck and shfmt
+        run: |
+          brew list shellcheck >/dev/null 2>&1 || brew install shellcheck
+          brew list shfmt >/dev/null 2>&1 || brew install shfmt
+          shellcheck --version
+          shfmt --version
+      - name: shellcheck + shfmt over every .sh
+        run: bash tests/lint.sh
+
+  dry-run-purity:
+    runs-on: macos-latest
+    # BOTH sides of the fork, because a dry run takes different code paths depending on
+    # what is installed and the `absent` side alone was picking the environment in
+    # which the repo's one known leak cannot fire. 30-python.sh's `uv python list`
+    # creates $MACBOOT_HOME/.cache/uv -- a real dry-run write, measured -- and it only
+    # happens when uv IS present. Testing only the bare runner made the purity verdict
+    # a property of the image rather than of the code, and the branch that leaks was
+    # exercised by nothing.
+    strategy:
+      fail-fast: false
+      matrix:
+        tools: [absent, present]
+    name: dry-run-purity (tools ${{ matrix.tools }})
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the tools the modules probe for
+        if: matrix.tools == 'present'
+        run: |
+          curl -fsSL https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+      - name: bootstrap.sh --dry-run must change nothing
+        env:
+          MACBOOT_TEST_TMP: ${{ runner.temp }}
+        run: bash tests/dry-run-purity.sh
+
+  bootstrap-markers:
+    runs-on: macos-latest
+    # bootstrap.sh's own control flow: state markers, --restart, the --only/--skip
+    # matcher, the resume path. Runs against fake five-line modules, so it needs no
+    # tools and touches nothing. Nothing else in the suite executes bootstrap.sh at
+    # all, which is how "a targeted run permanently suppresses a module from make all"
+    # shipped.
+    steps:
+      - uses: actions/checkout@v4
+      - name: marker and flag semantics
+        env:
+          MACBOOT_TEST_TMP: ${{ runner.temp }}
+        run: bash tests/bootstrap-markers.sh
+
+  double-run:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: run the home-scoped modules twice; second pass must report changed=0
+        env:
+          MACBOOT_TEST_TMP: ${{ runner.temp }}
+        run: bash tests/double-run.sh
+
+  unpushed-gate-fixtures:
+    runs-on: macos-latest
+    # The gate's FAIL-OPEN paths: a symlinked root, a bad depth, a mistyped root, zero
+    # repos scanned, a non-numeric timeout, plus the blind spots (detached HEAD, tags,
+    # linked worktrees) and the bundle-name collision that silently overwrote one repo's
+    # only backup with another's. A tool that says "this disk is safe to wipe" has to be
+    # tested on the ways it can be wrong, not the way it is right.
+    steps:
+      - uses: actions/checkout@v4
+      - name: fixture tests
+        env:
+          MACBOOT_TEST_TMP: ${{ runner.temp }}
+        run: bash tests/check-unpushed.sh
+
+  unpushed-gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Fixture repos, not the checkout: the gate's job is to fail while work
+      # exists in one place only, and the only way to test that is to build a repo
+      # that is in exactly that state. Two roots, because one dirty repo under a
+      # shared root would make the clean assertion untestable.
+      #
+      # `origin` is a local bare repo. It resolves offline, which keeps the test
+      # from depending on GitHub being up to prove a local-only check.
+      - name: build fixture repos
+        run: |
+          set -euo pipefail
+          git config --global user.email ci@example.com
+          git config --global user.name  ci
+          git config --global init.defaultBranch main
+          mk() { # mk <root> <name>
+            git init -q --bare "$RUNNER_TEMP/$2.git"
+            git init -q "$1/area/$2"
+            git -C "$1/area/$2" commit -q --allow-empty -m 'first'
+            git -C "$1/area/$2" remote add origin "$RUNNER_TEMP/$2.git"
+            git -C "$1/area/$2" push -q -u origin main
+          }
+          mkdir -p "$RUNNER_TEMP/clean/area" "$RUNNER_TEMP/dirty/area"
+          mk "$RUNNER_TEMP/clean" pushed
+          mk "$RUNNER_TEMP/dirty" ahead
+          # One commit that exists nowhere else. This is the whole point of Phase 0.
+          git -C "$RUNNER_TEMP/dirty/area/ahead" commit -q --allow-empty -m 'local only'
+      # The positive assertion has to prove it SCANNED something. `--verify` exits 0
+      # when it found zero repos, so "exits 0 on a clean repo" passed identically
+      # whether the fixture built a repo or nothing at all -- any drift in the
+      # $root/area/$name path shape, or in MACBOOT_REPO_DEPTH, would have silently
+      # un-tested Phase 0 while staying green. The sibling jobs both guard against
+      # exactly this vacuity (purity requires would-lines > 0, double-run requires
+      # first-pass changed > 0); this one had no equivalent.
+      - name: --verify exits 0 on a fully pushed repo, and actually scanned it
+        run: |
+          set -euo pipefail
+          out="$(MACBOOT_REPO_ROOTS="$RUNNER_TEMP/clean" bash check-unpushed.sh --report 2>&1)"
+          printf '%s\n' "$out"
+          grep -q 'pushed' <<<"$out" || { echo "FAIL: no repo was reported" >&2; exit 1; }
+          grep -qE '\bpushed\b' <<<"$out" || exit 1
+          if grep -q 'no git repos found' <<<"$out"; then
+            echo "FAIL: the gate scanned nothing, so exiting 0 proves nothing." >&2
+            exit 1
+          fi
+          MACBOOT_REPO_ROOTS="$RUNNER_TEMP/clean" bash check-unpushed.sh --verify
+      - name: --verify exits non-zero while a commit is unpushed
+        run: |
+          set -euo pipefail
+          if MACBOOT_REPO_ROOTS="$RUNNER_TEMP/dirty" bash check-unpushed.sh --verify; then
+            echo "FAIL: the gate passed with an unpushed commit present." >&2
+            echo "That is the one failure mode Phase 0 exists to prevent." >&2
+            exit 1
+          fi
+          echo "ok: gate refused a repo with a commit that exists in one place only"

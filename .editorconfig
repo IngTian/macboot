@@ -1,0 +1,34 @@
+# macboot — editor settings, so an editor and `shfmt -i 2 -ci` agree and a commit
+# does not carry a whitespace-only diff of somebody else's file.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# 2 spaces, matching `make fmt` (shfmt -i 2 -ci). A tab-indented script still
+# passes shellcheck, so nothing but this file catches the disagreement.
+[*.{sh,bash,zsh}]
+indent_style = space
+indent_size = 2
+
+# make requires literal tabs in recipes: spaces there are a "missing separator"
+# error, so an editor set to expand tabs breaks the build.
+[Makefile]
+indent_style = tab
+
+# Two trailing spaces are a hard line break in Markdown; stripping them silently
+# reflows the paragraph.
+[*.md]
+trim_trailing_whitespace = false
+
+# apps.tsv is tab-SEPARATED and read by a hand-rolled parser that needs empty columns
+# to survive. A row with an empty final column ends in a literal tab; strip it and the
+# parser shifts every field left, so the tier lands in the hint and the note. No
+# shipped row is affected today, which is exactly why this belongs here now rather
+# than after the first added row.
+[*.tsv]
+trim_trailing_whitespace = false
+indent_style = tab

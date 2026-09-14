@@ -1,0 +1,12 @@
+# macboot — shellcheck configuration. Applies to every script in the repo, since
+# shellcheck reads .shellcheckrc from the script's directory and each parent.
+
+# These scripts are bash, not zsh, even though zsh is the interactive shell they
+# configure: shellcheck does not meaningfully lint zsh, and a fresh macOS ships
+# bash 3.2, which is what the code is written against.
+shell=bash
+
+# Follow `# shellcheck source=lib/common.sh` into the sourced file, so the helper
+# names (run, has, link_once, die) are known instead of being reported as
+# unassigned references — the noise that trains people to add blanket disables.
+external-sources=true

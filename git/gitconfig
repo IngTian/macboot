@@ -1,0 +1,112 @@
+# macboot — shipped global git config, linked to ~/.config/git/config by
+# scripts/50-git.sh.
+#
+# This file is PUBLIC and tracked. The identity below is a placeholder and has to
+# stay one; your real name and address go in ~/.config/git/config.local, which the
+# [include] at the bottom pulls in and which lives outside this checkout.
+#
+# Do NOT set your identity with `git config --global`. Measured on git 2.54.0
+# (Apple Git-157): the write follows the symlink and rewrites THIS file in place —
+# the link survives, the target changes — so your address becomes a tracked
+# modification in a public repo that one `git commit -a` publishes.
+
+[user]
+	# useConfigOnly, and NO name/email. This is the difference between git refusing
+	# to commit and git committing as a fabricated author.
+	#
+	# A syntactically valid [user] block makes git ACCEPT the placeholder: verified
+	# with `git var GIT_AUTHOR_IDENT` against a HOME containing only this file, which
+	# printed `PLACEHOLDER <placeholder@example.invalid>` and exited 0, where an empty
+	# HOME exits 128 with "*** Please tell me who you are." So shipping a placeholder
+	# converted an unmissable hard stop into one warn scrolling past ~150 lines into an
+	# 11-module run. Before macboot, git refused and printed the fix; after macboot, it
+	# committed silently. A .invalid address does not help: it makes the commit
+	# unreachable, not unmade, and fixing the author of pushed commits means rewriting
+	# history and force-pushing it.
+	#
+	# useConfigOnly = true tells git never to guess an identity from the hostname or
+	# the account record, so with no name/email set it stops and tells you what to run.
+	# That restores the hard stop, and 50-git.sh's warn becomes a hint rather than the
+	# only line standing between you and 200 misattributed commits.
+	useConfigOnly = true
+
+[init]
+	# Without this, every `git init` prints the eight-line "hint: Using 'master'"
+	# advice and creates a branch whose name disagrees with the default branch of
+	# every remote you then push to, so the first push creates a second branch.
+	defaultBranch = main
+
+[pull]
+	# Default `git pull` merges, so any branch that moved while you worked on it
+	# grows a "Merge branch 'main' of github.com:..." commit that carries no
+	# information and makes the history unreadable in a review.
+	rebase = true
+
+[push]
+	# git >= 2.37. Without it the first push of a new branch aborts with
+	# "fatal: The current branch X has no upstream branch", which teaches people
+	# to type `-u` from memory and, when they forget it, to push to the wrong
+	# branch. Older git silently ignores unknown keys, so this is safe to ship.
+	autoSetupRemote = true
+
+[fetch]
+	# Remote-tracking refs are never removed otherwise: a branch deleted on the
+	# remote a year ago still shows in `git branch -r`, so `git branch -a` stops
+	# being evidence of anything. Only origin/* refs are pruned — your local
+	# branches are untouched.
+	prune = true
+
+[rerere]
+	# Records how you resolved a conflict and replays it. On a rebase of twenty
+	# commits over a moved base you otherwise resolve the same conflict once per
+	# commit, by hand, identically. The cache is per-repo (.git/rr-cache).
+	enabled = true
+
+[core]
+	# git's own XDG default already points here, but that default is computed from
+	# XDG_CONFIG_HOME, so another tool exporting XDG_CONFIG_HOME silently moves it
+	# and the global ignore stops applying. Nothing errors when that happens —
+	# ignored files just start appearing in `git status`, which is exactly how
+	# .claude/settings.local.json gets committed. Pin it.
+	excludesfile = ~/.config/git/ignore
+
+[diff]
+	# Distinguishes a block that MOVED from a block that was added or deleted, in
+	# a different colour. Without it, moving a function reads as 40 deletions plus
+	# 40 additions and a reviewer cannot tell whether the body also changed.
+	colorMoved = zebra
+
+# Your real identity, and anything else you do not want published. Kept outside
+# this checkout so `git status` here can never show it, and placed after the
+# [user] block above so it wins over the placeholder. scripts/50-git.sh prints the
+# two commands that create it when it detects the placeholder still in effect.
+[include]
+	path = ~/.config/git/config.local
+
+# ---------------------------------------------------------------------------
+# Per-directory-tree identity. This is the non-obvious part of the file.
+# ---------------------------------------------------------------------------
+#
+# Everything cloned under ~/work/ gets the address in config.work; everything
+# else keeps the one in config.local. The path decides, so you cannot forget to
+# run `git config user.email` after a clone — which is the mechanism by which a
+# personal address ends up on an employer's commit, and an employer address on a
+# public one. Neither is fixable after a push without rewriting history.
+#
+# Four things that are easy to get wrong here:
+#   * The trailing slash is required. "gitdir:~/work/" matches every repo under
+#     that directory; "gitdir:~/work" matches only a repo whose .git is literally
+#     at ~/work and silently matches nothing otherwise.
+#   * Order is precedence: within one file the last value wins, so this block sits
+#     after both [user] and the config.local include. Put it above them and the
+#     personal address silently overrides the work one inside ~/work.
+#   * The match is case-sensitive even though APFS is not, so a clone that landed
+#     in ~/Work/ is not covered. Use "gitdir/i:~/work/" if that happens to you.
+#   * A missing include file is silently ignored (measured, git 2.54.0, exit 0),
+#     so shipping these two lines costs nothing until you create the file.
+#
+# Create it the same way as config.local:
+#   git config --file ~/.config/git/config.work user.email you@employer.example
+
+[includeIf "gitdir:~/work/"]
+	path = ~/.config/git/config.work
