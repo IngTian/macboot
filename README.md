@@ -35,7 +35,7 @@ Every module is standalone, runnable in any order, and safe to re-run.
 | `50-git` | git config, and it offers to set your name and email |
 | `55-github` | offers `gh auth login` — browser sign-in, and uploads an SSH key |
 | `70-claude` | Claude Code settings and one plugin |
-| `80-mytools` | four tools of mine, each asked for separately, all default to no |
+| `80-mytools` | names four projects of mine and installs none of them |
 | `99-apps` | prints the GUI apps that are missing |
 
 **It asks before it does the personal bits.** Your git identity, GitHub sign-in and each of

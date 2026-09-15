@@ -30,7 +30,7 @@ SHFMT ?= shfmt
 SH_FILES := $(wildcard *.sh) $(wildcard lib/*.sh) $(wildcard scripts/*.sh) \
             $(wildcard tests/*.sh)
 
-.PHONY: help plan all optional optional-plan mytools mytools-plan apps \
+.PHONY: help plan all optional optional-plan apps \
         lint fmt test module module-plan
 
 ##@ Start here
@@ -53,12 +53,6 @@ optional-plan: ## dry run of `optional`
 
 optional: ## Brewfile.optional — the nice-to-have formulae
 	@$(BOOTSTRAP) --optional --only 10
-
-mytools-plan: ## dry run of `mytools`
-	@$(BOOTSTRAP) --dry-run --mytools --only 80
-
-mytools: ## build my own tools; skips the private one
-	@$(BOOTSTRAP) --mytools --only 80
 
 apps: ## print the GUI apps that are missing, with paste-ready commands
 	@$(BOOTSTRAP) --only 99 --yes

@@ -36,7 +36,6 @@ usage: ./bootstrap.sh [options]
   --only <module>  run only this module (repeatable; overrides its phase marker)
   --skip <module>  do not run this module (repeatable)
   --optional       also install the nice-to-have tier (Brewfile.optional)
-  --mytools        yes to all of my own tools without asking per tool
   --restart        clear phase markers, so every module runs again
   --keep-going     do not stop at the first failing module; still exits non-zero
   --no-color       plain output (same as NO_COLOR=1 in the environment)
@@ -56,8 +55,8 @@ run therefore reports every module as done; use --restart (or --only) to make
 one execute again. Nothing is marked during a dry run.
 
 Environment passed to every module: DRY_RUN, NO_COLOR, MACBOOT_ROOT,
-MACBOOT_HOME, MACBOOT_STAMP, MACBOOT_YES, MACBOOT_OPTIONAL, MACBOOT_MYTOOLS,
-MACBOOT_STEP_TOTAL, MACBOOT_STEP_N.
+MACBOOT_HOME, MACBOOT_STAMP, MACBOOT_YES, MACBOOT_OPTIONAL, MACBOOT_STEP_TOTAL,
+MACBOOT_STEP_N.
 EOF
 }
 
@@ -65,7 +64,6 @@ DO_RESTART=0
 KEEP_GOING=0
 MACBOOT_YES="${MACBOOT_YES:-0}"
 MACBOOT_OPTIONAL="${MACBOOT_OPTIONAL:-0}"
-MACBOOT_MYTOOLS="${MACBOOT_MYTOOLS:-0}"
 # Space-delimited strings, not arrays: under `set -u`, bash 3.2 aborts on
 # "${arr[@]}" when the array is empty, which is the common case for both.
 ONLY=''
@@ -85,7 +83,6 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --optional) MACBOOT_OPTIONAL=1 ;;
-    --mytools) MACBOOT_MYTOOLS=1 ;;
     --restart) DO_RESTART=1 ;;
     --keep-going) KEEP_GOING=1 ;;
     --no-color) NO_COLOR=1 ;;
@@ -106,7 +103,7 @@ require_macos
 # MACBOOT_STAMP gives every module a different backup suffix, so one run's .bak
 # files scatter across timestamps instead of sorting together.
 export DRY_RUN NO_COLOR MACBOOT_ROOT MACBOOT_HOME MACBOOT_STAMP
-export MACBOOT_YES MACBOOT_OPTIONAL MACBOOT_MYTOOLS
+export MACBOOT_YES MACBOOT_OPTIONAL
 
 STATE_DIR="$MACBOOT_HOME/.macboot/state"
 
@@ -236,7 +233,7 @@ banner
 # starts installing and tells you afterwards is the thing people are afraid of,
 # and the skip reasons are the part worth reading: "already done" and "--skip"
 # look identical once the run is over.
-log "home=$MACBOOT_HOME  optional=$MACBOOT_OPTIONAL  mytools=$MACBOOT_MYTOOLS"
+log "home=$MACBOOT_HOME  optional=$MACBOOT_OPTIONAL"
 RUN_LIST=''
 RUN_COUNT=0
 for _m in $ALL; do
@@ -314,9 +311,9 @@ export MACBOOT_STEP_TOTAL="$RUN_COUNT"
 #
 # A TARGETED run does not complete a step of the full bootstrap, so it writes no
 # marker. Doing so was a quiet trap: `make apps` (--only 99) marked 99 done, so the real
-# bootstrap never printed the GUI-app list; `make mytools` (--only 80) marked 80 done;
-# `make module M=40-node` marked node done. Recovery needed --restart, which is
-# documented for the resume case and nowhere near those targets.
+# bootstrap never printed the GUI-app list, and `make module M=40-node` marked node done.
+# Recovery needed --restart, which is documented for the resume case and nowhere near
+# those targets.
 mark_done() {
   if [ -n "$ONLY" ]; then
     return 0
@@ -350,12 +347,12 @@ for _m in $RUN_LIST; do
   # Modules are separate child processes, so a PATH fix a module makes inside its OWN
   # process dies with it. 10-brew evals `brew shellenv`, which is why it can use brew
   # itself -- but on a fresh Mac /opt/homebrew/bin is on no inherited PATH, so the next
-  # module could not. Measured in one `bootstrap.sh --dry-run --mytools` run:
-  # 80-mytools reported "witness -> needs go, which comes from 10-brew.sh" about the
-  # module that had just installed go, and 99-apps warned that its cask commands "cannot
-  # run until 10-brew.sh has finished". 30-python installs uv into ~/.local/bin with the
-  # same result for daylogs and trading-desk. Re-tested per iteration rather than once, so
-  # a directory that module N creates is on PATH for module N+1.
+  # module could not. Measured in one `bootstrap.sh --dry-run` run: 99-apps warned that its
+  # cask commands "cannot run until 10-brew.sh has finished" right after the module that
+  # installs brew, and the since-removed build steps in 80-mytools reported "needs go,
+  # which comes from 10-brew.sh" about the module that had just installed go. 30-python
+  # installs uv into ~/.local/bin with the same shape. Re-tested per iteration rather than
+  # once, so a directory that module N creates is on PATH for module N+1.
   for _d in "$_MACBOOT_PREFIX/bin" "$_MACBOOT_PREFIX/sbin" "$MACBOOT_HOME/.local/bin"; do
     [ -d "$_d" ] || continue
     case ":$PATH:" in
