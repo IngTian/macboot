@@ -239,6 +239,30 @@ run() {
   "$@"
 }
 
+# run_untracked <command...> -- run() for macboot's OWN bookkeeping.
+#
+# Same DRY_RUN behaviour as run(), so --dry-run purity is unaffected, but it does NOT
+# touch MACBOOT_CHANGED. A state marker records what macboot did; it is not a change to
+# the user's machine, and counting it destroyed the one number the tool exists to report.
+#
+# MEASURED, on a fully configured machine: `make all` printed "11 changed" while all ten
+# of its modules printed "0 changed" -- 1 for `mkdir -p ~/.macboot/state` plus 1 per
+# `touch <module>.done`. Three lines below that, the same run promised "re-run `make all`
+# any time; it will say changed=0". That promise held only because a second run
+# short-circuits on the markers and never calls mark_done; `--restart` reported ~20,
+# because clearing ten markers and rewriting them is twenty tracked commands.
+#
+# The failure that matters is not the wrong integer. It is that a real change becomes
+# indistinguishable from bookkeeping without reading every sub-summary by eye, which is
+# exactly the signal `changed=0` is supposed to carry.
+run_untracked() {
+  if [ "$DRY_RUN" = "1" ]; then
+    printf '%s would%s %s\n' "$_C_DIM" "$_C_RESET" "$*" >&2
+    return 0
+  fi
+  "$@"
+}
+
 # run_quiet <label> <command...> -- run() for a long, NOISY command, with macboot owning
 # the terminal instead of the tool.
 #
@@ -369,7 +393,10 @@ link_once() {
     return 0
   fi
 
-  run mkdir -p "$(dirname "$dst")"
+  # Guarded, because `run` counts a command whether or not it changed anything and
+  # `mkdir -p` on a directory that exists changes nothing. Linking into an existing
+  # ~/.config/git therefore reported two changes per link instead of one.
+  [ -d "$(dirname "$dst")" ] || run mkdir -p "$(dirname "$dst")"
 
   if [ -e "$dst" ] || [ -L "$dst" ]; then
     backup="$dst.bak.$MACBOOT_STAMP"
@@ -490,7 +517,10 @@ $end"
       "$_C_DIM" "$_C_RESET" "$marker" "$file" >&2
     return 0
   fi
-  run mkdir -p "$(dirname "$file")"
+  # Guarded for the same reason as link_once above: for any file in $HOME this is
+  # `mkdir -p ~`, which can never create anything, yet still counted as a change on
+  # every first-run append.
+  [ -d "$(dirname "$file")" ] || run mkdir -p "$(dirname "$file")"
   # Checked, like the two write paths above. Unchecked, a destination that cannot be
   # written -- a symlink into a read-only volume is the realistic one -- printed
   # "line 397: Permission denied" from the shell and then macboot's own green

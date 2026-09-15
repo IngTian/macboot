@@ -162,6 +162,27 @@ install_homebrew() {
 # that asks `brew --prefix` and so gets a non-default prefix right.
 ensure_shellenv() {
   bh_prefix="$(brew_prefix)"
+
+  # Do not add a SECOND shellenv. The Homebrew installer prints this line for you to
+  # paste, and most machines that already have brew already have it -- so appending
+  # macboot's fence made every login shell eval `brew shellenv` twice.
+  #
+  # That is not a harmless duplicate: it is precisely what this repo's README cites as
+  # its own reason to exist ("nvm, conda, gcloud, oh-my-zsh, p10k, bun and opencode had
+  # each appended a block over two years and nothing ever removed one"). macboot had
+  # become one of the tools on that list. Found on a real machine, in ~/.zprofile.
+  #
+  # Matched outside macboot's own fence only: the fence is idempotent and re-running must
+  # keep replacing it, so a run must not mistake its own block for a foreign one.
+  if [ -f "$MACBOOT_HOME/.zprofile" ] &&
+    awk '/^# >>> macboot:brew-shellenv >>>$/ { f = 1 }
+         !f && /brew[^#]*shellenv/ { found = 1 }
+         /^# <<< macboot:brew-shellenv <<<$/ { f = 0 }
+         END { exit !found }' "$MACBOOT_HOME/.zprofile"; then
+    skip "brew shellenv -> already in .zprofile outside macboot's fence, leaving it alone"
+    return 0
+  fi
+
   # The -x guard keeps a profile that outlives Homebrew from erroring on every
   # new shell, which is how a bad PATH line turns into an unusable terminal.
   # Unquoted heredoc so the prefix is baked in, with \$( escaped so the eval is

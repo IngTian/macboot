@@ -285,7 +285,7 @@ fi
 # realistic cause is one `sudo ./bootstrap.sh` leaving a root-owned ~/.macboot, after
 # which every later non-sudo run died after module 1 for no stated reason.
 if [ ! -d "$STATE_DIR" ]; then
-  if ! run mkdir -p "$STATE_DIR"; then
+  if ! run_untracked mkdir -p "$STATE_DIR"; then
     die "cannot create $STATE_DIR, so no module can be marked complete.
      If an earlier run used sudo, the directory is root-owned; fix with:
          sudo chown -R $(id -un) $MACBOOT_HOME/.macboot"
@@ -303,7 +303,7 @@ fi
 if [ "$DO_RESTART" = 1 ]; then
   for _m in $RUN_LIST; do
     [ -f "$STATE_DIR/$_m.done" ] || continue
-    run rm -f "$STATE_DIR/$_m.done"
+    run_untracked rm -f "$STATE_DIR/$_m.done"
   done
 fi
 
@@ -327,7 +327,7 @@ mark_done() {
   # A marker that cannot be written is not fatal: the module DID succeed, and the only
   # consequence is that it runs again next time. Warn rather than abort, because
   # aborting here throws away a run that actually worked.
-  if ! run touch "$STATE_DIR/$1.done"; then
+  if ! run_untracked touch "$STATE_DIR/$1.done"; then
     warn "could not write $STATE_DIR/$1.done, so $1 will run again on the next
      invocation even though it just succeeded"
   fi

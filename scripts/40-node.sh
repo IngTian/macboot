@@ -123,6 +123,25 @@ install_nvm() {
 # the ONLY consumer of nvm.sh -- nothing non-interactive should have to source 1000+
 # lines of shell to find a node binary.
 profile_block() {
+  # Do not add a SECOND nvm block. install_nvm above already passes PROFILE=/dev/null to
+  # stop the vendor installer writing its own copy, for exactly this reason -- but that
+  # only covers the machine where MACBOOT installed nvm. On a machine that already had
+  # nvm, the user's own block predates us, and appending the fence made every
+  # interactive shell source nvm.sh twice. Measured on a real machine: lines 17-18 were
+  # the user's, 123-125 were macboot's, and sourcing 1000+ lines of shell twice is the
+  # single most expensive thing in that startup.
+  #
+  # Matched outside macboot's own fence only, so a re-run keeps replacing its own block
+  # instead of mistaking it for the user's.
+  if [ -f "$MACBOOT_HOME/.zshrc" ] &&
+    awk '/^# >>> macboot:nvm >>>$/ { f = 1 }
+         !f && /nvm\.sh/ { found = 1 }
+         /^# <<< macboot:nvm <<<$/ { f = 0 }
+         END { exit !found }' "$MACBOOT_HOME/.zshrc"; then
+    skip "nvm profile block -> .zshrc already sources nvm.sh itself, leaving it alone"
+    return 0
+  fi
+
   # $HOME stays literal, expanded at shell start rather than now, so the block is
   # right for whoever's home this is. if/fi rather than `[ -s ... ] && . ...`: a
   # failing && test leaves $? non-zero as the last statement of .zshrc, and a
