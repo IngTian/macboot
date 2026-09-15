@@ -83,30 +83,18 @@
 [include]
 	path = ~/.config/git/config.local
 
-# ---------------------------------------------------------------------------
-# Per-directory-tree identity. This is the non-obvious part of the file.
-# ---------------------------------------------------------------------------
+# There is deliberately no [includeIf "gitdir:..."] block here.
 #
-# Everything cloned under ~/work/ gets the address in config.work; everything
-# else keeps the one in config.local. The path decides, so you cannot forget to
-# run `git config user.email` after a clone — which is the mechanism by which a
-# personal address ends up on an employer's commit, and an employer address on a
-# public one. Neither is fixable after a push without rewriting history.
+# An earlier version shipped one keyed on ~/work/, so repos under that path picked up a
+# second identity from config.work. Two problems, and the second is the real one:
 #
-# Four things that are easy to get wrong here:
-#   * The trailing slash is required. "gitdir:~/work/" matches every repo under
-#     that directory; "gitdir:~/work" matches only a repo whose .git is literally
-#     at ~/work and silently matches nothing otherwise.
-#   * Order is precedence: within one file the last value wins, so this block sits
-#     after both [user] and the config.local include. Put it above them and the
-#     personal address silently overrides the work one inside ~/work.
-#   * The match is case-sensitive even though APFS is not, so a clone that landed
-#     in ~/Work/ is not covered. Use "gitdir/i:~/work/" if that happens to you.
-#   * A missing include file is silently ignored (measured, git 2.54.0, exit 0),
-#     so shipping these two lines costs nothing until you create the file.
+#   * ~/work/ is invented. It is not a git convention, not a macOS one, and macboot never
+#     creates it. The block silently matched nothing on every machine, while appearing in
+#     `50-git.sh`'s "settings to merge" output as though it meant something.
+#   * Carrying two identities at all is a niche need. Shipping the scaffolding for it
+#     presumes a workflow most people do not have, and a default config should not encode
+#     a guess about how someone separates employers from personal work.
 #
-# Create it the same way as config.local:
-#   git config --file ~/.config/git/config.work user.email you@employer.example
-
-[includeIf "gitdir:~/work/"]
-	path = ~/.config/git/config.work
+# The recipe, with the four traps that make it easy to get wrong, is in
+# notes/MANUAL-STEPS.md for anyone who actually needs it. `[include]` above is
+# unconditional and assumes no directory layout, which is why it stays.
