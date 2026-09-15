@@ -1,15 +1,6 @@
 # macboot
 
-```
- _______________________________
-< one clone, one make. moo.     >
- -------------------------------
-        \   ^__^
-         \  (oo)\_______
-            (__)\       )\/\
-                ||----w |
-                ||     ||
-```
+**One clone, one `make`.**
 
 Takes a brand-new macOS install to a working dev machine with one `git clone` and one
 `make`. It installs a toolchain and writes config. That is all it does.

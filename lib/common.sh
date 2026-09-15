@@ -140,23 +140,19 @@ _STEP_LABEL=''
 # banner -- the one-time header. Prints the mode, because someone reading a
 # scrollback needs to know whether what follows actually happened.
 #
-# Pure ASCII, and that is the point rather than the joke: the box-drawing header this
-# replaces hardcoded U+250C/2500/2502/2514 and so BYPASSED the glyph table above -- the one
-# mechanism in this file for not emitting multi-byte glyphs when the locale does not promise
-# UTF-8, ignored by the very first thing the tool prints. (An earlier version of this comment
-# said it "rendered as mojibake". That was never measured: printf writes the same bytes
-# either way and whether they render is the terminal's business. Bypassing the mechanism is
-# the defect; what a given terminal then did with it is not knowable from here.)
-# ASCII art needs no second code path, so there is nothing here to fall out of sync.
-# 51 columns at its widest.
+# One line, and ASCII. Two headers have been removed from here: a box drawn with
+# U+250C/2500/2502/2514, which BYPASSED the glyph table above -- the one mechanism in this
+# file for not emitting multi-byte glyphs when the locale does not promise UTF-8, ignored by
+# the very first thing the tool prints -- and then a four-line ASCII cow, which fixed the
+# locale problem but was reported as not rendering well in practice. A header's whole job is
+# to say which mode this is; anything past that is a thing that can look wrong on someone
+# else's terminal for no benefit.
 banner() {
   local mode
   mode='live'
   [ "$DRY_RUN" = "1" ] && mode='dry run - nothing will be changed'
-  printf '\n%s   ^__^%s          macboot\n' "$_C_BLUE" "$_C_RESET" >&2
-  printf '%s   (oo)\\_______%s   %s%s%s\n' "$_C_BLUE" "$_C_RESET" "$_C_DIM" "$mode" "$_C_RESET" >&2
-  printf '%s   (__)\\       )\\/\\%s\n' "$_C_BLUE" "$_C_RESET" >&2
-  printf '%s       ||----w ||%s\n\n' "$_C_BLUE" "$_C_RESET" >&2
+  printf '\n%smacboot%s  %s%s%s\n\n' \
+    "$_C_BLUE" "$_C_RESET" "$_C_DIM" "$mode" "$_C_RESET" >&2
 }
 
 # step <label> -- begin a step of the current module. Closes the previous one's timing.
@@ -554,10 +550,11 @@ require_macos() {
 # the transcript.
 #
 # One line, not a three-line box: this is called 15+ times in a full run (every module,
-# bootstrap twice, every test), so the boxes were 44 of `make plan`'s 281 lines. The cow
-# carries the signal that the box's colour used to -- yellow if anything warned, green if
-# anything changed, dim on a clean changed=0 re-run -- and being ASCII it also survives
-# LC_ALL=C, which the box's `┌ │ └` did not.
+# bootstrap twice, every test), so the boxes were 44 of `make plan`'s 281 lines. The MODULE
+# NAME carries the signal the box's colour used to -- yellow if anything warned, green if
+# anything changed, dim on a clean changed=0 re-run. Colouring text that is already there
+# beats adding a glyph to colour: the box's `┌ │ └` did not survive LC_ALL=C, and the ASCII
+# cow that replaced them did not render well either.
 summary() {
   local name tail_note col
   step_end
@@ -579,8 +576,8 @@ summary() {
   [ -n "$MACBOOT_TALLY" ] && printf '%s %s %s\n' \
     "$MACBOOT_CHANGED" "$MACBOOT_SKIPPED" "$MACBOOT_WARNED" >>"$MACBOOT_TALLY"
 
-  printf '\n%s   ^__^ (oo)%s %s%s:%s %s%s%s changed  %s%s%s skipped  %s%s%s warnings%s\n' \
-    "$col" "$_C_RESET" "$_C_DIM" "$name" "$_C_RESET" \
+  printf '\n%s%s%s: %s%s%s changed  %s%s%s skipped  %s%s%s warnings%s\n' \
+    "$col" "$name" "$_C_RESET" \
     "$_C_GREEN" "$MACBOOT_CHANGED" "$_C_RESET" \
     "$_C_DIM" "$MACBOOT_SKIPPED" "$_C_RESET" \
     "$([ "$MACBOOT_WARNED" -gt 0 ] && printf '%s' "$_C_YELLOW" || printf '%s' "$_C_DIM")" \
