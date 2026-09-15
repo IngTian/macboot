@@ -310,7 +310,8 @@ hook_zshrc() {
   ensure_block "$rc" shell <<EOF
 # Managed by macboot (scripts/20-shell.sh). Edits inside this fence are lost on the
 # next run. Put your own config in ~/.config/zsh/conf.d/*.zsh -- one file per tool,
-# so this file never has to grow again. A prompt (p10k etc) goes outside the fence.
+# so this file never has to grow again. Nothing else belongs in this file: even the
+# prompt is a unit (90-p10k.zsh), and a file of yours with the same name replaces it.
 if [[ -r $ref ]]; then
   source $ref
 fi
