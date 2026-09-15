@@ -123,8 +123,10 @@ moves the prompt. Automating it means the script holding your account password.
 
 System Settings → Screen Saver → pick **manifold**.
 
-`make mytools` builds the `.saver` bundle and installs it to
-`~/Library/Screen Savers/`, so it will be in the list. It does not select it.
+macboot does not build or install it — see
+[IngTian/manifold](https://github.com/IngTian/manifold), which builds with plain `swiftc`
+and needs no Xcode. Once its `.saver` bundle is in `~/Library/Screen Savers/` it shows up
+in the list; selecting it is still this manual step.
 
 **Why not automated.** The selection is not a stable `defaults` domain any more. It
 moved out of `com.apple.screensaver` into the wallpaper/screensaver store under

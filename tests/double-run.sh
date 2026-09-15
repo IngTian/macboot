@@ -17,7 +17,6 @@
 #   * 30-python 40-node  pipe a vendor installer into a shell (uv, nvm) and download
 #                        toolchains. Same reasons.
 #   * 70-claude          runs `claude plugin ...` against a live marketplace.
-#   * 80-mytools         clones and builds from the network.
 #   * anything that changes the login shell (chsh) -- interactive password prompt.
 #
 # `defaults` used to head that list: 60-macos wrote 27 of them, and cfprefsd resolves
@@ -38,7 +37,11 @@ set -euo pipefail
 #: Basenames eligible for a real run. An allowlist, not a denylist: an unreviewed
 #: scripts/45-foo.sh must never be executed for real by a test just because nobody
 #: added it to a skip list. New modules are reported as excluded until reviewed.
-DOUBLE_RUN_ALLOW="00-preflight.sh 20-shell.sh 50-git.sh 99-apps.sh"
+#:
+#: 80-mytools joined the list when it stopped cloning and building: it now calls run()
+#: zero times and only prints, which makes it exactly as safe here as 99-apps, which has
+#: been on the list all along for the same reason.
+DOUBLE_RUN_ALLOW="00-preflight.sh 20-shell.sh 50-git.sh 80-mytools.sh 99-apps.sh"
 
 #: Where the two scratch homes live. TMPDIR by default so a run cannot dirty the
 #: checkout; point it somewhere durable when you want to inspect the result.
@@ -211,8 +214,7 @@ do_pass() {
     #
     # Every box is SUMMED rather than `tail -1`: a module that delegates work to a
     # child which prints its own box would otherwise have the earlier counts silently
-    # dropped, reading as changed=0. 10-brew.sh and 80-mytools.sh each contain two
-    # summary calls today.
+    # dropped, reading as changed=0. 10-brew.sh contains two summary calls today.
     _c="$(awk '{ for (i = 1; i < NF; i++) if ($(i+1) == "changed") s += $i } \
                 END { print s + 0 }' "$_out" 2>/dev/null || true)"
     if [ -z "$_c" ] || ! grep -q 'changed' "$_out"; then
