@@ -201,3 +201,51 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 Use rustup rather than `brew install rust`: both want to own `cargo` and `rustc` on
 PATH, and the resulting shell resolves whichever came first without telling you.
+
+## Two git identities, if you ever need them
+
+macboot ships **one** identity, in `~/.config/git/config.local`. Splitting it by directory
+is a niche need, so the shipped `git/gitconfig` deliberately contains no
+`includeIf "gitdir:..."` block — an earlier version keyed one on `~/work/`, a path that is
+neither a git nor a macOS convention and that macboot never creates, so it matched nothing
+on every machine while still showing up in `50-git.sh`'s output as though it did something.
+
+If you do want it — say an employer address on everything under `~/employer/` and your
+personal one everywhere else:
+
+```sh
+git config --file ~/.config/git/config.employer user.name  "Your Name"
+git config --file ~/.config/git/config.employer user.email you@employer.example
+```
+
+Then append to `~/.config/git/config.local` — **not** to the shipped `config`, which is a
+symlink into the checkout:
+
+```gitconfig
+[includeIf "gitdir:~/employer/"]
+	path = ~/.config/git/config.employer
+```
+
+The point of doing it by path is that you cannot forget to run `git config user.email`
+after a clone, which is how a personal address ends up on an employer's commit and vice
+versa — neither fixable after a push without rewriting history.
+
+Four things that are easy to get wrong (measured on git 2.54.0, Apple Git-157):
+
+- **The trailing slash is required.** `gitdir:~/employer/` matches every repo under that
+  directory; `gitdir:~/employer` matches only a repo whose `.git` is literally at that path,
+  and silently matches nothing otherwise.
+- **Order is precedence.** Within one file the last value wins, so the `includeIf` must come
+  *after* the `[user]` block and any unconditional include. Put it above and the general
+  identity silently overrides the specific one.
+- **The match is case-sensitive even though APFS is not**, so a clone that landed in
+  `~/Employer/` is not covered. Use `gitdir/i:~/employer/` if that bites.
+- **A missing include file is silently ignored** (exit 0), so a typo in the path fails
+  quietly rather than loudly.
+
+Verify it took effect from inside such a repo — `--includes` matters, because a scoped read
+without it skips include expansion and reports the outer value:
+
+```sh
+cd ~/employer/some-repo && git config --includes --get user.email
+```
