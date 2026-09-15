@@ -24,6 +24,7 @@
 brew "gh"                  # 80-mytools.sh probes the private repo with it; `gh auth setup-git` is how git gets a credential
 brew "zsh-autosuggestions" # 20-shell.sh sources it from $(brew --prefix)/share
 brew "zsh-completions"     # ditto; must exist before the .zshrc fpath line points at it
+brew "powerlevel10k"       # the prompt. shell/conf.d/90-p10k.zsh sources it and 05-p10k-instant.zsh does the instant prompt; without this a fresh machine gets those units and no prompt. macboot still never touches your ~/.p10k.zsh — run `p10k configure` for that
 brew "fzf"                 # Ctrl-R history search that 20-shell.sh wires up
 brew "tmux"                # long-running builds survive a terminal close
 brew "htop"                # `top` cannot sort by RSS interactively

@@ -29,7 +29,7 @@ Every module is standalone, runnable in any order, and safe to re-run.
 |---|---|
 | `00-preflight` | inspects the machine, changes nothing |
 | `10-brew` | Homebrew + the `Brewfile` formulae. Never upgrades anything |
-| `20-shell` | zsh config: `shell/rc.zsh` plus eight units in `shell/conf.d/` |
+| `20-shell` | zsh config: `shell/rc.zsh` plus eleven units in `shell/conf.d/` |
 | `30-python` | uv, and one pinned CPython |
 | `40-node` | nvm + node LTS — and node visible to *non-interactive* shells too |
 | `50-git` | git config, and it offers to set your name and email |
@@ -72,8 +72,9 @@ macboot appends one fenced `source` line and never needs another.
 ```
 ~/.zshrc                          one macboot fence. Never grows.
   └── shell/rc.zsh                the loader
-      ├── shell/conf.d/*.zsh      00-path 10-history 20-options 30-fpath
-      │                           50-compinit 60-keys 70-aliases 80-plugins
+      ├── shell/conf.d/*.zsh      00-path 05-p10k-instant 10-history 20-options
+      │                           30-fpath 45-nvm 50-compinit 60-keys
+      │                           70-aliases 80-plugins 90-p10k
       └── ~/.config/zsh/conf.d/*.zsh    yours. macboot never writes here.
 ```
 
