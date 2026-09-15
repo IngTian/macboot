@@ -123,12 +123,9 @@ report_mdm() {
   # Not fatal: the spec targets a personally-owned Mac, but the audited machine
   # is DEP-enrolled, so this branch is the live one and has to stay a warning.
   if is_managed; then
-    warn "this Mac is MDM-enrolled. Two consequences for the rest of the run:
-     some defaults(1) writes in 60-macos.sh will be reverted by the agent on
-     its next check-in (the run still reports changed, and the next run reports
-     changed again -- that is the agent, not a bug here), and admin rights for
-     the Homebrew installer may be withheld entirely. Removing the agent is out
-     of scope: it violates policy and Jamf reinstalls it."
+    warn "this Mac is MDM-enrolled, so admin rights for the Homebrew installer may
+     be withheld entirely. Removing the agent is out of scope: it violates policy
+     and Jamf reinstalls it."
   else
     ok "no MDM enrollment detected"
   fi

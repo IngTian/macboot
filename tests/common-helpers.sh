@@ -106,8 +106,8 @@ chmod 644 "$SCRATCH/ro/target"
 step "INTERRUPT: a signal must stop a module, not let it finish its mutation loop"
 # The INT/TERM handler shared the EXIT handler, and a bash trap handler that returns does
 # NOT terminate the script: the module resumed at the next command and ran every
-# remaining mutation. Ctrl-C during 60-macos.sh therefore still applied the rest of the
-# `defaults` writes. SIGTERM is sent directly rather than driving a pty, so the test is
+# remaining mutation. Ctrl-C during 20-shell.sh therefore still finished rewriting
+# .zshrc. SIGTERM is sent directly rather than driving a pty, so the test is
 # deterministic; it exercises the same handler.
 OUT="$SCRATCH/sig"
 mkdir -p "$OUT"

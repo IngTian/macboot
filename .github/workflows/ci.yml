@@ -8,10 +8,10 @@
 #   * The Raycast Cmd-Space swap CANNOT be tested. It is a nested
 #     com.apple.symbolichotkeys write that needs the pref daemon restarted and a
 #     logged-in session; it lives in notes/MANUAL-STEPS.md and stays unverified.
-#   * No system `defaults`, no Homebrew install, no login-shell change, no vendor
-#     installers (uv/nvm/rustup). tests/double-run.sh excludes those modules and
-#     says why per module; nothing else here runs them either. So Homebrew and
-#     `defaults` idempotency are asserted by no test at all.
+#   * No Homebrew install, no login-shell change, no vendor installers (uv/nvm/rustup).
+#     tests/double-run.sh excludes those modules and says why per module; nothing else
+#     here runs them either. So Homebrew idempotency is asserted by no test at all.
+#     macboot no longer writes system `defaults` at all -- that module was removed.
 #   * A hosted runner is NOT a fresh personal Mac: Homebrew, git, node, python and
 #     the Xcode CLT are already installed, HOME is /Users/runner, the machine is
 #     not MDM-enrolled and there is no Time Machine destination to detect. Every

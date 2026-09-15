@@ -193,8 +193,8 @@ step_end() {
 # So Ctrl-C was swallowed outright: the module resumed at the next command and ran every
 # remaining mutation to completion. Measured through a real pty -- ^C at mutation 3 of 12
 # left all 12 on disk, and stripping this one line made the same run stop at 3. On a real
-# Mac that meant Ctrl-C during 60-macos.sh still applied the remaining `defaults` writes
-# and Ctrl-C during 20-shell.sh still finished rewriting .zshrc, after the user had
+# Mac that meant Ctrl-C during 20-shell.sh still finished rewriting .zshrc, and Ctrl-C
+# during 10-brew.sh still installed the rest of the Brewfile, after the user had
 # decided to stop ("wrong machine", "I meant --dry-run"), with bootstrap.sh printing
 # "interrupted" only once the child had already done everything. It also meant mark_done
 # was never reached, so a module that fully succeeded re-ran anyway -- the opposite of
@@ -399,7 +399,7 @@ link_once() {
 # a redirect is not a command run() can invoke. It is DRY_RUN-guarded on both paths
 # below and it increments MACBOOT_CHANGED by hand, so the counters and --dry-run stay
 # honest -- but "grep for run() to audit the writes" does not find this function, and
-# it is the one that edits ~/.zshrc. link_once and defaults_set are the same shape.
+# it is the one that edits ~/.zshrc. link_once is the same shape.
 ensure_block() {
   local file marker begin end body desired current tmp mode
   file="$1"
@@ -506,37 +506,21 @@ $end"
 # macOS helpers
 # ---------------------------------------------------------------------------
 
-# defaults_set <domain> <key> <type> <value>
+# There is deliberately no defaults_set helper here.
 #
-# Write a default only when the current value differs, so a re-run reports skip
-# rather than change. `defaults write` is itself idempotent in effect, but calling
-# it unconditionally makes the changed counter meaningless -- and that counter is
-# how the double-run test proves anything.
-defaults_set() {
-  local domain key type value current want
-  domain="$1"
-  key="$2"
-  type="$3"
-  value="$4"
-  current="$(defaults read "$domain" "$key" 2>/dev/null || true)"
-  # Booleans read back as 0/1, so normalise before comparing or every run "changes".
-  want="$value"
-  case "$type" in
-    -bool) case "$value" in true | yes | 1) want=1 ;; *) want=0 ;; esac ;;
-  esac
-  if [ "$current" = "$want" ]; then
-    skip "defaults $domain $key -> already $want"
-    return 0
-  fi
-  run defaults write "$domain" "$key" "$type" "$value"
-  ok "defaults $domain $key -> $value"
-}
+# macboot used to ship 60-macos.sh, which wrote 27 `defaults` covering the Dock, Finder,
+# key repeat, screenshots and the trackpad. It was removed because system preferences are
+# the user's taste to set, not a bootstrap's to impose -- and because that module was the
+# one place the tool could not honour MACBOOT_HOME: defaults(1) talks to cfprefsd, which
+# resolves the preference directory from the user record, so the module mutated the real
+# machine even under a scratch home and had to be excluded from the idempotency test.
+# Anything that wants to write a default again should reckon with both of those first.
 
 # is_managed -- is this Mac enrolled in MDM?
 #
 # Not fatal: macboot targets a personally-owned Mac, but a managed one should get a
-# loud warning rather than a confusing half-run, because Jamf silently reverts some
-# defaults and withholds admin for others.
+# loud warning rather than a confusing half-run, because Jamf withholds admin rights
+# for the Homebrew installer.
 is_managed() {
   profiles status -type enrollment 2>/dev/null | grep -qi 'Enrolled via DEP: Yes\|MDM enrollment: Yes'
 }
