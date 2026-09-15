@@ -39,10 +39,13 @@ usage() {
   cat <<'EOF'
 Usage: 40-node.sh [--dry-run]
 
-Installs nvm into ~/.nvm, sources it from ~/.zshrc, installs the current LTS and
-aliases it default, then symlinks node/npm/npx into ~/.local/bin so that hooks,
-LaunchAgents and cron can find node -- verified in a clean environment, because an
-inherited-PATH check gives a false pass.
+Installs nvm into ~/.nvm, installs the current LTS and aliases it default, then
+symlinks node/npm/npx into ~/.local/bin so that hooks, LaunchAgents and cron can find
+node -- verified in a clean environment, because an inherited-PATH check gives a false
+pass.
+
+Writes nothing into ~/.zshrc: sourcing nvm for interactive shells is
+shell/conf.d/45-nvm.zsh, loaded by 20-shell.sh's single fence.
 
 EOF
 }
@@ -119,39 +122,27 @@ install_nvm() {
   ok_live "nvm $NVM_VERSION -> $MACBOOT_NVM_DIR"
 }
 
-# The interactive half: what makes `nvm use 20` work at a prompt, and deliberately
-# the ONLY consumer of nvm.sh -- nothing non-interactive should have to source 1000+
-# lines of shell to find a node binary.
-profile_block() {
-  # Do not add a SECOND nvm block. install_nvm above already passes PROFILE=/dev/null to
-  # stop the vendor installer writing its own copy, for exactly this reason -- but that
-  # only covers the machine where MACBOOT installed nvm. On a machine that already had
-  # nvm, the user's own block predates us, and appending the fence made every
-  # interactive shell source nvm.sh twice. Measured on a real machine: lines 17-18 were
-  # the user's, 123-125 were macboot's, and sourcing 1000+ lines of shell twice is the
-  # single most expensive thing in that startup.
-  #
-  # Matched outside macboot's own fence only, so a re-run keeps replacing its own block
-  # instead of mistaking it for the user's.
-  if [ -f "$MACBOOT_HOME/.zshrc" ] &&
-    awk '/^# >>> macboot:nvm >>>$/ { f = 1 }
-         !f && /nvm\.sh/ { found = 1 }
-         /^# <<< macboot:nvm <<<$/ { f = 0 }
-         END { exit !found }' "$MACBOOT_HOME/.zshrc"; then
-    skip "nvm profile block -> .zshrc already sources nvm.sh itself, leaving it alone"
-    return 0
-  fi
-
-  # $HOME stays literal, expanded at shell start rather than now, so the block is
-  # right for whoever's home this is. if/fi rather than `[ -s ... ] && . ...`: a
-  # failing && test leaves $? non-zero as the last statement of .zshrc, and a
-  # themed prompt then draws an error marker on the first prompt of every shell.
-  ensure_block "$MACBOOT_HOME/.zshrc" nvm <<'EOF'
-export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; fi
-if [ -s "$NVM_DIR/bash_completion" ]; then . "$NVM_DIR/bash_completion"; fi
-EOF
-}
+# This module no longer writes anything into ~/.zshrc.
+#
+# It used to `ensure_block` a `macboot:nvm` fence there, sourcing nvm.sh for interactive
+# shells. That work now lives in shell/conf.d/45-nvm.zsh, loaded by the single
+# `macboot:shell` fence like every other unit. Three things got better:
+#
+#   * ~/.zshrc goes back to ONE macboot line. A second fence was nvm being given special
+#     treatment for no reason -- nothing else macboot configures for zsh writes its own
+#     block, and the design is built around that file not growing.
+#   * The unit is overridable. Dropping your own 45-nvm.zsh into ~/.config/zsh/conf.d/
+#     replaces it outright, because rc.zsh keys units by basename and reads yours second.
+#     A fence in .zshrc could only be edited, and editing inside a fence is lost on the
+#     next run by design.
+#   * The duplicate-block problem disappears rather than being detected. The previous
+#     version had to scan .zshrc for a pre-existing `nvm.sh` source and skip if it found
+#     one, because on a machine that already had nvm this module appended a second copy and
+#     every interactive shell sourced 1000+ lines of nvm twice. Writing nothing cannot
+#     duplicate anything, so that guard is gone with the block it guarded.
+#
+# install_nvm above still passes PROFILE=/dev/null, which is now the ONLY thing standing
+# between the vendor installer and an unfenced block of its own in .zshrc. Keep it.
 
 install_node_lts() {
   # The guard asks "is the default the SELF-ADVANCING lts/* alias?", not "does any
@@ -287,7 +278,6 @@ main() {
   require_macos
   step "nvm $NVM_VERSION"
   install_nvm
-  profile_block
   step "node LTS"
   install_node_lts
   step "node for non-interactive shells (hooks, LaunchAgents, cron)"
