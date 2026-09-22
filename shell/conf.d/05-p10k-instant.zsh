@@ -16,8 +16,16 @@
 # `05` rather than `00`: 00-path.zsh sets PATH and prints nothing, and having PATH ready
 # first is worth more than five filenames of margin.
 #
+# SKIPPED WHILE PROFILING, because the two cannot coexist: rc.zsh's profiler prints a
+# timing line per unit DURING startup, which is exactly the console output the instant
+# prompt refuses to tolerate. Without this, `zprofile` ends every run with p10k's
+# multi-paragraph "[WARNING]: Console output during zsh initialization detected" -- a
+# warning macboot causes and then shows you, about nothing. Skipping also takes this unit's
+# own ~13 ms out of a measurement you are taking to find where the time goes.
+#
 # The cache path is p10k's own, not ours -- do not "tidy" it into $XDG_CACHE_HOME
 # unconditionally, because p10k computes this exact string itself and would miss the file.
-if [[ -r ${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh ]]; then
+if [[ -z ${MACBOOT_ZSH_PROFILE:-} ]] &&
+  [[ -r ${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh ]]; then
   source ${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh
 fi

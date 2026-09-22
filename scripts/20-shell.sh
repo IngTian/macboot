@@ -213,6 +213,12 @@ appended to `.zshrc`.
     50         compinit runs, once      (macboot's 50-compinit.zsh)
     above 50   may rely on completions and on the final keymap
 
+A vendor completion snippet belongs ABOVE 50, and getting this wrong is slow rather
+than broken. Many of them end with "if compdef is not defined, run compinit" -- so
+below 50 they run a SECOND full compinit of their own. Measured: gcloud's
+completion.zsh.inc cost 297 ms at 20-gcloud.zsh and almost nothing at 60-gcloud.zsh.
+If a unit of yours is unexpectedly slow, `MACBOOT_ZSH_PROFILE=1 exec zsh` names it.
+
 Use two digits: the sort is lexical, so `9-foo.zsh` runs after `80-plugins.zsh`.
 
 A file whose name matches one of macboot's WINS, because yours is loaded second:
