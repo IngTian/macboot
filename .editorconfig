@@ -24,11 +24,10 @@ indent_style = tab
 [*.md]
 trim_trailing_whitespace = false
 
-# apps.tsv is tab-SEPARATED and read by a hand-rolled parser that needs empty columns
-# to survive. A row with an empty final column ends in a literal tab; strip it and the
-# parser shifts every field left, so the tier lands in the hint and the note. No
-# shipped row is affected today, which is exactly why this belongs here now rather
-# than after the first added row.
+# No .tsv is shipped any more — apps.tsv went with the installer, and the GUI apps it
+# listed are prose in docs/tools.md now. The rule stays because tab-separated data is
+# the one format where trimming trailing whitespace silently corrupts a row: an empty
+# final column ends in a literal tab, and stripping it shifts every field left.
 [*.tsv]
 trim_trailing_whitespace = false
 indent_style = tab

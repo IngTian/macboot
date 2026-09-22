@@ -3,9 +3,13 @@
 # wrote, but ONLY where the project has declared how it wants shell formatted.
 #
 # This lives in a file rather than inline in settings.json for two reasons: it needs a
-# loop, and as a file it is linted by tests/lint.sh like everything else here. A hook
-# that runs on every edit in every repository is exactly the code that should not be an
-# unreviewable JSON one-liner.
+# loop, and as a file it can be read, linted and diffed. A hook that runs on every edit in
+# every repository is exactly the code that should not be an unreviewable JSON one-liner.
+#
+# settings.json points at "$HOME/.claude/hooks/shfmt-on-write.sh", so copy this file there:
+#     mkdir -p ~/.claude/hooks && cp claude/hooks/shfmt-on-write.sh ~/.claude/hooks/
+# A path into a checkout would break the moment the checkout moved, and a hook that fails
+# silently on every edit is worse than no hook.
 #
 # WHY THE .editorconfig GATE. The previous version ran `shfmt -i 2 -ci -w` on any *.sh
 # Claude touched, anywhere, because settings.json is a GLOBAL user setting. Edit one

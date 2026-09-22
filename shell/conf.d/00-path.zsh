@@ -9,9 +9,9 @@
 
 # A literal, not `eval "$(brew shellenv)"`. shellenv costs a subprocess on every single
 # shell start AND prepends brew to PATH, which would silently override the order
-# established below. Apple Silicon only (00-preflight.sh refuses anything else), so there
-# is one possible prefix and nothing to detect; if brew is not installed yet the (N-/)
-# globs below drop the entries.
+# established below. Apple Silicon only, so there is one possible prefix and nothing to
+# detect; change this literal if you are on Intel, where it is /usr/local. If brew is not
+# installed yet the (N-/) globs below simply drop the entries.
 export HOMEBREW_PREFIX=/opt/homebrew
 
 # Ordering, and why each entry sits where it does:

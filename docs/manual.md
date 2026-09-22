@@ -1,14 +1,18 @@
 # Manual steps
 
-Everything macboot cannot do for you, with the reason it cannot. None of these are
-"not implemented yet". Each one is either a GUI consent gate that exists precisely
-so a script cannot pass it, or something I tried to automate and reverted because a
-script that half-works is worse than two clicks you remember making.
+The things that stay human, with the reason each one does. None of these are "not
+implemented yet". Each is either a GUI consent gate that exists precisely so a script
+cannot pass it, or something I tried to automate and reverted because a script that
+half-works is worse than two clicks you remember making.
 
-Work through this list once, after `make all`.
+This list predates the decision to stop shipping an installer, and it's the part of
+that decision that was easiest to make: everything below was *already* a doc telling
+you what to do by hand. The rest of the repo just caught up.
+
+Work through it once, after installing the tools in [`tools.md`](tools.md).
 
 - [ ] Raycast on ⌘-Space, Spotlight off it
-- [ ] Xcode Command Line Tools (if `00-preflight.sh` sent you here)
+- [ ] Xcode Command Line Tools (needed before anything else; `git` comes with them)
 - [ ] App Store sign-in, App Store apps
 - [ ] App licences, and 2FA on the accounts behind them
 - [ ] Change your login shell — only if it is not already zsh (see §5)
@@ -69,7 +73,7 @@ it asks `softwareupdate` to raise a **modal GUI dialog** with *Install* and
 headless path for the standalone CLT package: the alternatives are accepting a
 licence on the user's behalf (I will not do that in a script that runs on someone
 else's machine) or downloading full Xcode from an authenticated Apple account.
-Click the button, wait for it, re-run `make all`.
+Click the button, wait for it, then carry on.
 
 ## 3. App Store apps and signing in
 
@@ -77,9 +81,9 @@ Sign in to the App Store with your Apple ID, then install whatever you keep ther
 
 **Why not automated.** The sign-in is Apple ID authentication with 2FA — a code
 delivered to another device. There is nothing for a script to do. This is also the
-reason `apps.tsv` lists GUI apps rather than installing them: once App Store apps
-need a human anyway, `mas` buys you nothing and adds a dependency that breaks every
-time StoreKit changes.
+reason [`tools.md`](tools.md) lists GUI apps rather than installing them: once App
+Store apps need a human anyway, `mas` buys you nothing and adds a dependency that
+breaks every time StoreKit changes.
 
 ## 4. App licences and 2FA
 

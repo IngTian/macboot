@@ -12,13 +12,13 @@
 # all hold a write lock on ends up that way by construction, so the fix has to be
 # structural: give every tool its own file and stop appending.
 #
-# This file is never ~/.zshrc itself. 20-shell.sh only appends a fenced source line,
-# because a published bootstrap that overwrites a stranger's ~/.zshrc destroys work
-# it cannot see. Anything you want to keep goes outside the fence.
+# This file is never ~/.zshrc itself. Your .zshrc holds one `source` line pointing at a
+# symlink you own; everything else you keep lives in your own units. See docs/shell.md.
 #
 # Interactive-only: zsh reads ~/.zshrc for interactive shells, so nothing loaded from
-# here is visible to `zsh -c '...'`. Exports a non-interactive shell must see (node,
-# for Claude Code's hooks) belong in ~/.zshenv and are 40-node.sh's problem.
+# here is visible to `zsh -c '...'`. Exports a non-interactive shell must see -- node for
+# an editor hook, say -- belong in ~/.zshenv, which this loader deliberately does not
+# touch. A login-but-non-interactive shell reads ~/.zprofile and skips ~/.zshrc entirely.
 
 # Sourcing this twice runs compinit twice and double-registers zsh-autosuggestions'
 # ZLE widgets, which shows up as suggestions being accepted twice per keystroke.
@@ -26,10 +26,10 @@
 MACBOOT_ZSHRC_SOURCED=1
 
 # ${0:A:h} = this file's own directory with symlinks resolved, NOT $HOME/.config/...
-# 20-shell.sh installs a symlink, so resolving it is what guarantees the drop-ins
-# loaded are the ones from the same checkout as this loader. A hardcoded path reads a
-# different repo's config when MACBOOT_HOME points at a scratch home (the double-run
-# test) and reads nothing at all under a non-default ZDOTDIR.
+# ~/.config/macboot/rc.zsh is normally a symlink into a checkout, so resolving it is what
+# guarantees the units loaded come from the same checkout as this loader. A hardcoded path
+# reads a different repo's config the moment you keep two checkouts, and reads nothing at
+# all under a non-default ZDOTDIR.
 _macboot_rc_dir=${0:A:h}
 
 # Your own drop-ins. macboot never writes here, so nothing it does can clobber them.

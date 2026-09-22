@@ -1,7 +1,7 @@
 # macboot — must-have formulae. The toolchain everything downstream assumes.
 #
 # No `cask` lines here or in Brewfile.optional, ever (spec D8): GUI apps are
-# listed in apps.tsv and installed by hand. A cask in a Brewfile makes an
+# listed in docs/tools.md and installed by hand. A cask in a Brewfile makes an
 # unattended run pop authentication dialogs and, worse, silently reinstalls an
 # app the user already dragged in from a .dmg, so `brew bundle check` never
 # agrees with reality and no run can report changed=0.
@@ -11,7 +11,7 @@
 #
 # Deliberately absent: rust (rustup owns it — brew's rust and rustup fight over
 # ~/.cargo/bin), python (uv owns it), node (nvm owns it), goenv/vcpkg/miniconda
-# (being retired). See the spec's decision table.
+# (retired). See docs/tools.md for the reasoning behind each choice.
 
 # NO `brew "git"`. 00-preflight.sh DIES without the Xcode CLT, so the CLT's git is a hard
 # prerequisite and is therefore always present by the time this file is read -- on a fresh
@@ -35,7 +35,7 @@ brew "ripgrep"             # every script and every agent search in this repo as
 # `has jq` and 70-aliases.zsh on `_macboot_has jq` -- so the system copy satisfies them.
 # This repo targets current macOS on Apple Silicon and nothing older, which is what makes
 # relying on it safe.
-brew "gnupg"               # signed commits; also gpg-agent for the SSH keys named in the spec
+brew "gnupg"               # signed commits; also gpg-agent for SSH keys
 brew "go"                  # per the decision table: brew go, no goenv (go.mod toolchain since 1.21)
 brew "cmake"               # C/C++ is cmake + ninja only, no vcpkg, no Conan
 brew "ninja"               # the generator cmake is configured against

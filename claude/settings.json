@@ -68,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash @MACBOOT_ROOT@/claude/hooks/shfmt-on-write.sh",
+            "command": "bash \"$HOME/.claude/hooks/shfmt-on-write.sh\"",
             "timeout": 15
           }
         ]

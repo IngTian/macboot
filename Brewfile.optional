@@ -1,5 +1,5 @@
 # macboot — nice-to-have formulae. Installed only by `make optional`, or by
-# `scripts/10-brew.sh --optional` / `MACBOOT_OPTIONAL=1`.
+# `brew bundle --file Brewfile.optional`. See docs/tools.md for what each is for.
 #
 # Nothing in this file may be a prerequisite for another module. 10-brew.sh
 # therefore treats a failure here as a warning, not a fatal error: these are

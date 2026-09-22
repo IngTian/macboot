@@ -1,0 +1,62 @@
+# The only CI left, and the only kind this repo still needs.
+#
+# There is nothing to install and nothing to integration-test — the installer, its ten
+# modules and its five test files were deleted. But twelve zsh files here get sourced by a
+# real interactive shell, and a syntax error in any of them breaks EVERY new terminal on a
+# machine that symlinks them, including the terminal you would use to fix it. That is the
+# highest-severity failure this repo can still cause, and `zsh -n` catches it in a second.
+#
+# Deliberately NOT here: anything that installs, runs, or asserts on a machine's state.
+# Those jobs existed to test an installer that no longer exists.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  parse:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # zsh -n parses without executing. macos-latest ships zsh, which is the shell these
+      # files are written for -- checking them with bash would pass files zsh rejects.
+      - name: zsh files parse
+        run: |
+          n=0
+          for f in shell/rc.zsh shell/conf.d/*.zsh; do
+            zsh -n "$f" || exit 1
+            n=$((n + 1))
+          done
+          echo "$n zsh files parse"
+
+      - name: the one shell script is clean
+        run: |
+          brew install shellcheck shfmt
+          shellcheck claude/hooks/shfmt-on-write.sh
+          shfmt -i 2 -ci -d claude/hooks/shfmt-on-write.sh
+
+      - name: settings.json is valid JSON
+        run: python3 -c "import json;json.load(open('claude/settings.json'))"
+
+      # A Brewfile that names a formula homebrew/core does not have fails at the worst
+      # moment: halfway through someone's first install. `brew info` resolves a name without
+      # installing anything.
+      # Fed by process substitution, NOT a pipe. `sed ... | while read` puts the loop body in
+      # a SUBSHELL, so `exit 1` there exits the subshell and the step still passes green --
+      # a check that cannot fail is worse than no check, because it is believed.
+      - name: every Brewfile formula still exists
+        run: |
+          rc=0
+          for f in Brewfile Brewfile.optional; do
+            while read -r name; do
+              brew info --formula "$name" >/dev/null 2>&1 || {
+                echo "::error file=$f::no such formula: $name"
+                rc=1
+              }
+            done < <(sed -n 's/^brew "\([^"]*\)".*/\1/p' "$f")
+          done
+          [ "$rc" -eq 0 ] && echo "all Brewfile formulae resolve"
+          exit "$rc"

@@ -33,19 +33,14 @@ docs/specs/
 # Local state and test scratch the bootstrap itself writes
 # ---------------------------------------------------------------------------
 
-# Belt and braces, NOT a description of where anything writes. Being accurate about
-# this matters: a comment claiming the checkout is a sanctioned scratch area is how the
-# next contributor concludes it is fine to write one.
+# Belt and braces, NOT a description of where anything writes. Nothing in this repo
+# executes any more, so nothing here writes anywhere at all — these patterns are left
+# because a hand-made scratch dir or a stray redirect should not become a commit.
 #
-#   * The run-state directory is $MACBOOT_HOME/.macboot/state — in the HOME being
-#     bootstrapped, never in the checkout (bootstrap.sh resolves STATE_DIR from
-#     MACBOOT_HOME).
-#   * Every test scratches in `mktemp -d "$TMPDIR/macboot-*"`, so no `fakehome/` or
-#     `tmp/` is ever created here.
-#
-# They stay ignored anyway, because a stray `make plan | tee log` or a hand-made
-# scratch dir should not become a commit, and tests/dry-run-purity.sh asserts the
-# checkout gains no files during a plan.
+# The `.macboot/` entry is historical: an earlier version of this repo shipped an
+# installer that kept per-module state in $MACBOOT_HOME/.macboot/state. That was in the
+# HOME being set up, never in the checkout. Kept ignored so an old state directory left
+# on a machine that ran it can never be committed by accident.
 .macboot/
 *.log
 logs/

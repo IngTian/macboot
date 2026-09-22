@@ -5,18 +5,24 @@
 # most expensive thing in it by an order of magnitude. Every interactive shell paid that,
 # whether or not it ever switched node version.
 #
-# It does not have to. 40-node.sh symlinks node/npm/npx from the nvm default into
-# ~/.local/bin, which 00-path.zsh puts first on PATH -- so RUNNING node never needed nvm,
-# only SWITCHING versions does. That split is the module's whole thesis, written for
-# non-interactive shells; this is the same idea applied to interactive ones.
+# It does not have to be. Symlink node/npm/npx from the nvm default into ~/.local/bin,
+# which 00-path.zsh puts first on PATH, and RUNNING node never needs nvm -- only SWITCHING
+# versions does:
+#
+#     for b in node npm npx; do
+#       ln -sf "$(dirname "$(nvm which default)")/$b" ~/.local/bin/$b
+#     done
+#
+# That split matters most for non-interactive shells, which never read this file at all;
+# this applies the same idea to interactive ones.
 #
 # So: node/npm/npx work immediately from the symlinks, and nvm.sh is sourced the first time
 # you type `nvm`. `nvm use 20` still wins afterwards, because nvm PREPENDS the version's bin
 # to PATH and therefore lands ahead of ~/.local/bin.
 #
-# This block used to be a `macboot:nvm` fence in ~/.zshrc. See scripts/40-node.sh for why
-# that moved here, and note that a 45-nvm.zsh of your own in ~/.config/zsh/conf.d/ replaces
-# this file wholesale.
+# This block used to be a second fence in ~/.zshrc, which meant it could only be edited,
+# not replaced -- and edits in a managed fence are lost. As a unit, a 45-nvm.zsh of your own
+# in ~/.config/zsh/conf.d/ replaces this file wholesale. See docs/shell.md.
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 
 if [[ -s $NVM_DIR/nvm.sh ]]; then
