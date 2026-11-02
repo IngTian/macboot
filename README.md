@@ -287,18 +287,17 @@ Don't:
 | Google Chrome | `google-chrome` | `Google Chrome.app` | DevTools, and checking what Safari renders differently |
 
 ```sh
-brew install --formula git-lfs go cmake ninja shellcheck shfmt pre-commit gnupg mkcert
+brew install --formula git-lfs go cmake ninja shellcheck shfmt pre-commit gnupg
 git lfs install
 ```
 
 | | why |
 |---|---|
 | `git-lfs` | large files; `git lfs install` adds its filter to `~/.gitconfig` |
-| `go` | brew's go, no goenv. Since 1.21 a `go.mod` `toolchain` line fetches the version a project needs |
+| `go` | brew's go, no goenv. A go.mod `go` line newer than brew's makes go fetch that toolchain itself (see Languages) |
 | `cmake` `ninja` | all of C/C++. Compilers come from the CLT. No vcpkg, no Conan |
 | `shellcheck` `shfmt` `pre-commit` | writing shell |
 | `gnupg` | for signing commits and tags (nothing turns that on yet) |
-| `mkcert` | locally-trusted TLS certs |
 
 ### git
 
@@ -348,9 +347,23 @@ repos get theirs by directory. Append this to `~/.gitconfig` after its `[user]` 
 Check from inside a repo with `git config --includes --get user.email`. A missing include
 file is ignored silently.
 
-### Languages: one manager each
+### Languages: one manager each, and a default toolchain
 
 Two managers for one language is how a shell runs the wrong interpreter without telling you.
+The rule for the rest: a project's tools are its own dependencies, pinned by its lockfile.
+Only things I use outside projects are installed globally.
+
+| | Python | Node / TS | Go | Rust | C/C++ |
+|---|---|---|---|---|---|
+| manager | uv | nvm | brew `go` | rustup | the CLT |
+| default version | 3.13 | `lts/*` | brew's stable | `stable` | Apple clang |
+| project pin | `requires-python`, `uv.lock` | `.nvmrc`, `package-lock.json` | go.mod `go` line, `go.sum` | `rust-toolchain.toml`, `Cargo.lock` | — |
+| format | `ruff format` | VS Code built-in | `gofmt` | `cargo fmt` | `xcrun clang-format` |
+| lint | `ruff check` | `tsc` strict | `go vet`, plus staticcheck, errcheck, deadcode | `cargo clippy` | clangd's clang-tidy |
+| types | none (Pylance) | `typescript` per project | the compiler | the compiler | the compiler |
+| test | `pytest` | `node --test`, or `vitest` where Vite is | `go test -race` | `cargo test` | `ctest` |
+| VS Code | Python, Ruff | built-in | Go (fetches gopls, dlv) | rust-analyzer | clangd |
+| global | `uv tool` apps | nothing | three linters in `~/go/bin` | rustfmt, clippy | `cmake`, `ninja` |
 
 **Python is uv's.** No conda, pyenv, `pip install` or global venv.
 
@@ -359,9 +372,21 @@ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh &
   uv python install --default 3.13
 ```
 
-`--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
-3.9.6, years behind, and brew's `python3` arrives uninvited as a dependency of pre-commit,
-autojump and ollama and wins. Per project, run `uv sync` and commit `uv.lock`.
+- `--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
+  3.9.6, years behind, and brew's `python3` arrives uninvited as a dependency of
+  pre-commit, autojump and ollama and wins. 3.13 is the newest version my CI tests. Older
+  versions arrive on demand: `uv sync --python 3.11`.
+- Per project: `uv add --dev ruff pytest` puts them in `[dependency-groups] dev`, which
+  `uv sync` installs by default. A `[project.optional-dependencies] dev` extra isn't
+  installed by default, so a plain `uv sync` leaves pytest out. Then
+  `uv run ruff format`, `uv run ruff check .` and `uv run pytest -q`. Commit `uv.lock`.
+- Global only for apps: `uv tool install` (kaggle, trading-desk, daylogs). A one-off is
+  `uvx <tool>`. Never `uv tool install` ruff or pytest, because CI runs the locked versions.
+- Loose scripts: `uv add --script fig.py matplotlib numpy` writes the deps into the file,
+  then `uv run fig.py`. Notebooks, when there is one: `uv run --with jupyter jupyter lab`.
+- VS Code: the Python extension (Pylance, debugger) and Ruff (`charliermarsh.ruff`). Set
+  `"[python]": {"editor.defaultFormatter": "charliermarsh.ruff"}` so format-on-save matches
+  CI. Ruff runs the project's own `.venv` ruff first.
 
 **Node is nvm's**, for several versions side by side.
 
@@ -380,16 +405,75 @@ v=$(gh api repos/nvm-sh/nvm/releases/latest -q .tag_name) &&    # a tag, never m
   prints nothing and the links point at themselves.
 - Check in a clean environment, not in your own shell (that one already has nvm loaded):
   `env -i HOME=$HOME /bin/zsh -c 'command -v node npm npx'`
+- **npm, the package manager that ships with node.** Every repo has a `package-lock.json`,
+  and CI runs `npm ci`. No pnpm, yarn or bun, and no corepack: Node 25 stopped shipping it.
+- A project pins its node in `.nvmrc`, which CI reads too (`node-version-file: .nvmrc`).
+  `nvm install` inside the repo fetches that version.
+- Nothing global. Tools are devDependencies, run with `npx`; a one-off is just
+  `npx <tool>`. A `npm i -g` bin lands in the nvm version's `bin/`, which a new terminal
+  can't see until `nvm` loads, and which the next LTS leaves behind.
+- Types: `npm i -D typescript`, then `npx tsc --noEmit`. Outside a project, `npx tsc` fetches
+  an ancient TypeScript 2.0. For Astro, `astro check`, because `astro build` doesn't
+  type-check.
+- Tests: `node --test` with `node:assert/strict`, and `vitest` only where Vite already is.
+  Run `.ts` scripts with `node x.ts` (types are stripped by default since 22.18; no enums,
+  no `.tsx`), not tsx or ts-node.
+- Editor: VS Code's built-in TS server, formatter and debugger. No prettier and no linter
+  until a repo has a second contributor.
 
-**Go**: brew `go`. `~/go/bin` goes at the end of PATH so a project's toolchain wins. The
-linters I use:
-`for p in honnef.co/go/tools/cmd/staticcheck github.com/kisielk/errcheck golang.org/x/tools/cmd/deadcode; do go install $p@latest; done`
+**Go is brew's `go`**, with `GOTOOLCHAIN` left at `auto`. If a go.mod `go` line is newer than
+brew's go, that toolchain is downloaded for that module, so the version lives in go.mod. CI
+reads the same line (`go-version-file: go.mod`).
 
-**Rust**: rustup, never `brew install rust`; the two fight over `~/.cargo/bin`.
-`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && ~/.cargo/bin/rustup component add rust-analyzer`.
-§2 already puts `~/.cargo/bin` on PATH.
+```sh
+for p in honnef.co/go/tools/cmd/staticcheck github.com/kisielk/errcheck golang.org/x/tools/cmd/deadcode; do
+  go install $p@latest
+done
+```
 
-**C/C++**: CLT compilers, `cmake`, `ninja`.
+- Built in: `gofmt`, `go vet`, `go test -race` (works with `CGO_ENABLED=0` on macOS) and
+  modules (commit `go.sum`). Each repo wires them into `make fmt vet test`.
+- The three linters live in `~/go/bin` because I run them by hand across repos rather than
+  as gates. Re-run the loop when brew moves go to a new minor version: a linter built with
+  go1.N refuses a `go 1.N+1` module.
+- Vulnerabilities, when needed, with no install:
+  `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`
+- VS Code: the Go extension (`golang.go`) installs `gopls`, and `dlv` the first time you
+  debug, into `~/go/bin` itself. Don't pre-install them.
+- Not used: golangci-lint (it wraps the same checks), gofumpt, goimports (gopls organizes
+  imports), and go.mod `tool` lines (tool deps join the module's version selection).
+
+**Rust is rustup's**, never `brew install rust`; the two fight over `~/.cargo/bin`. I don't
+use it yet, so install it with the first Rust project:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+  sh -s -- -y --no-modify-path --profile minimal -c rustfmt,clippy
+```
+
+- Stay on `stable` and update by hand with `rustup update`. A project that needs a version
+  pins it in `rust-toolchain.toml` with `components = ["rustfmt", "clippy"]`, and rustup
+  installs that toolchain on first use.
+- The minimal profile plus rustfmt and clippy is the default profile without `rust-docs`,
+  which is 718 MB of a 1.2 GB toolchain. §2 puts `~/.cargo/bin` on PATH.
+- `cargo fmt`, `cargo clippy` and `cargo test`; `rust-lldb` on top of the CLT's lldb.
+- VS Code: `rust-lang.rust-analyzer` bundles its own server, so no rust-analyzer component.
+
+**C/C++ uses the CLT as the toolchain** (clang, lldb, clangd, clang-format), plus brew's
+`cmake` and `ninja`. No brew `llvm`, no vcpkg, no Conan; dependencies come per project
+through CMake `FetchContent`.
+
+- `cmake -B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`. clangd reads that
+  database, and `ctest` comes with cmake.
+- Run `xcrun clang-format`, since there's no `/usr/bin` shim. clang-tidy only ships with
+  brew's llvm; clangd's built-in clang-tidy covers the editor.
+- VS Code: `llvm-vs-code-extensions.vscode-clangd`, which uses `/usr/bin/clangd`.
+
+**Swift**: the CLT's `swiftc`, which is what manifold builds with. Nothing else.
+
+VS Code extensions come over with 👤 Settings Sync. To add one on the command line, use
+`"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" --install-extension <id>`,
+since `code` isn't on PATH until you run Shell Command: Install 'code' command in PATH.
 
 ## 4. Markets & research
 
@@ -461,12 +545,7 @@ uv tool install daylogs && mkdir -p ~/Documents/daylogs/inbox     # → day
 | Snipaste | `snipaste` | `Snipaste.app` | screenshots: snip, annotate, pin to screen |
 | AirStats | `airstats` | `AirStats.app` | menu-bar system monitor |
 
-```sh
-brew install --formula ffmpeg p7zip gifsicle
-```
-
-`ffmpeg` handles audio and video. `p7zip` opens the archives Archive Utility won't.
-`gifsicle` shrinks screen-recording GIFs down to something you can attach.
+`brew install --formula ffmpeg` for audio and video from the terminal.
 
 ### manifold: a mountain as breathing points of light
 
@@ -527,6 +606,9 @@ Slack and Zoom are on my current Mac for work only, so they aren't listed.
 - **Nix, Ansible, chezmoi.** This runs before any package manager exists.
 - **iTerm2 shell integration.** Not on my current Mac, and its installer appends to
   `~/.zshrc`. If I ever want it, it goes in a §2 unit.
+- **iTerm2's own AI assistant.** In iTerm2 I only use Claude Code. My old Mac's prefs point
+  the assistant at OpenAI, and none of that carries over, which is what I want.
+- **`p7zip`, `mkcert`, `gifsicle`.** They were on my current Mac, but I never used them.
 - **Work-only tools on my current Mac:** Slack, Zoom, gcloud, glab, gitlab-runner, buf,
   protobuf, kubeconform, lua and redis. Also left out: one-offs (`wimlib`, `mcp-publisher`,
   which witness's CI now runs) and autotools, which a build pulls in when it needs them.
