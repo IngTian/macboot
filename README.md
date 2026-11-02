@@ -1,7 +1,7 @@
 # macboot
 
-What I install on a new Mac, and how I want it set up. One file, no scripts: do it by
-hand, top to bottom, or do §0 by hand and give the rest to Claude Code:
+What I install on a new Mac, grouped by what it's for, and how I want it set up. One file, no
+scripts: do §0 by hand, then go through the rest yourself or give it to Claude Code:
 
 ```sh
 gh repo clone IngTian/macboot ~/devpro/ing/macboot && cd ~/devpro/ing/macboot && claude
@@ -12,10 +12,23 @@ gh repo clone IngTian/macboot ~/devpro/ing/macboot && cd ~/devpro/ing/macboot &&
 > step. Finish with three lists: done, skipped (and why), left for me.
 
 **Why there's no script.** This repo used to be ~4,700 lines of idempotent bash. Nearly
-every bug it ever had was the same shape: a fixed plan run against a machine it hadn't
-looked at (`brew shellenv` already in `.zprofile`, nvm already sourced). An agent looks
-first. The decisions were always the valuable part. The scripted version is still in
-history at `f71dd6f`.
+every bug it had was the same shape: a fixed plan run against a machine it hadn't looked at
+(`brew shellenv` already in `.zprofile`, nvm already sourced). An agent looks first. The
+decisions were always the valuable part. The scripted version is still in history at
+`f71dd6f`.
+
+| § | category | what |
+|---|---|---|
+| 0 | Bootstrap 👤 | CLT, Homebrew, PATH, gh, Claude Code |
+| 1 | **Claude Code & AI** | Claude Code (essential), plugins, settings, witness, ollama |
+| 2 | Terminal & shell | iTerm2, the CLI basics, zsh |
+| 3 | Development | VS Code, git, languages, Docker, Chrome |
+| 4 | Markets & research | TradingView, trading-desk, Kaggle, LaTeX, PDFs |
+| 5 | Notes, tasks & life | Obsidian, TickTick, daylogs, Google Drive, WPS Office |
+| 6 | Mac utilities | Raycast, Snipaste, AirStats, manifold, media CLIs |
+| 7 | Chat, calls & remote | WeChat, Discord, Slack, Zoom, Windows App |
+| 8 | Games | Steam |
+| 9 | By hand 👤 | what stays human, and why |
 
 ## Rules for whoever runs this
 
@@ -24,10 +37,22 @@ history at `f71dd6f`.
   installs x86_64 everything without a warning. `/opt/homebrew` is assumed throughout.
 - **Look, then act.** Check before every install and skip what exists. Never upgrade
   something as a side effect.
+- **`brew install` below always means**
+  `HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install`.
+  Without those three, installing a formula upgrades it, and its dependents, when they're
+  already there. Not `brew bundle` either: it treats *outdated* as *missing*. Formulae are
+  `--formula`, so a name can't resolve to a cask.
+- **Apps: `brew install --cask <cask>` only if `/Applications/<bundle>` doesn't exist.** A
+  cask over an app dragged in from a `.dmg` fails. The tables give the bundle name, which
+  often isn't the app's name. Casks are installed one at a time and never from a bundle file.
+- **Run each code block as one command.** Separate shell calls don't share variables or
+  functions, so `v=…` or `nvm` set in one call is gone in the next.
 - **Nothing gets appended to `~/.zshrc`, `~/.zprofile` or `~/.zshenv` unchecked.** `grep`
   first. Keep vendor installers out of rc files (`INSTALLER_NO_MODIFY_PATH=1`,
-  `PROFILE=/dev/null`, `--no-modify-path`). After installing apps, grep the rc files again:
-  Docker Desktop and others append their own lines. Fold those into a §5 unit.
+  `PROFILE=/dev/null`, `--no-modify-path`), and ignore the "add this to your `.zshrc`"
+  advice they print. Apps append lines on first launch (Docker Desktop adds a PATH line to
+  `~/.zprofile`), so look again then. PATH lines can stay where login shells read them;
+  interactive lines (completions, aliases) belong in a §2 unit.
 - **👤 means a person.** Passwords, browser logins, GUI dialogs, System Settings, which
   email goes where. Don't guess them and don't script around them.
 - **No secrets in this repo.** Keys, tokens, licences and private config move from the old
@@ -38,138 +63,87 @@ history at `f71dd6f`.
 Each of these needs a person, in this order:
 
 ```sh
-xcode-select --install     # 👤 dialog: Install, Agree. clang, git, the SDK
+xcode-select --install     # 👤 dialog: Install, Agree, and wait until it's done. clang, git, the SDK
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  # 👤 sudo password
-grep -q 'brew.*shellenv' ~/.zprofile 2>/dev/null ||
-  echo 'if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi' >> ~/.zprofile
-eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# ~/.local/bin (uv, claude, the node links) on PATH for every zsh, and ahead of brew in login shells
+grep -qs '\.local/bin' ~/.zshenv ||
+  echo 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac' >> ~/.zshenv
+grep -qs 'brew.*shellenv' ~/.zprofile || cat >> ~/.zprofile <<'EOF'
+if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
+typeset -U path; path=(~/.local/bin $path)   # path_helper and shellenv just pushed it behind brew
+EOF
+eval "$(/opt/homebrew/bin/brew shellenv)"; export PATH="$HOME/.local/bin:$PATH"   # this shell too
+
 brew install gh && gh auth login --git-protocol ssh    # 👤 browser; also creates + uploads an SSH key
-curl -fsSL https://claude.ai/install.sh | bash          # Claude Code, native: auto-updates
+curl -fsSL https://claude.ai/install.sh | bash          # Claude Code, native: auto-updates, ~/.local/bin/claude
 claude                                                   # 👤 browser login
 ```
 
+👤 Then bring over from the old Mac, before anything below writes to them:
+`~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude/memory/`, and the per-project
+memory under `~/.claude/projects/`. §1 adds to `settings.json`, so copying it later would
+undo that. If the username changed, fix the absolute paths inside it.
+
 - Don't set `NONINTERACTIVE=1` for Homebrew. It switches to `sudo -n` and aborts on a fresh
   admin account.
-- `shellenv` goes in `~/.zprofile`, not `.zshrc`. Login shells, hooks and LaunchAgents
-  read `.zprofile`; `.zshrc` is only read by interactive shells.
+- `shellenv` goes in `~/.zprofile`, which login shells read; `.zshrc` is interactive only.
+  `~/.zshenv` is the one file every zsh reads, including the non-interactive ones that hooks
+  and cron start. Without the `path=` line, `zsh -lc python3` finds brew's Python, not uv's.
 - After a major macOS upgrade, `test -d "$(xcode-select -p)"`. The CLT receipt survives
   the upgrade; the directory sometimes doesn't, and the next `brew install` dies looking for
   clang.
 
-## 1. Command-line tools
+## 1. Claude Code & AI
+
+### Claude Code: essential
+
+Installed in §0 with the native installer, which auto-updates. Not the cask: Homebrew installs
+don't auto-update. Then:
 
 ```sh
-export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1
-brew install --formula gh powerlevel10k zsh-autosuggestions zsh-completions fzf autojump \
-  ripgrep tmux htop gnupg go cmake ninja shellcheck shfmt pre-commit ollama
+claude plugin marketplace add anthropics/claude-plugins-official
+claude plugin install superpowers@claude-plugins-official
+claude plugin install frontend-design@claude-plugins-official
+claude plugin marketplace add DietrichGebert/ponytail
+claude plugin install ponytail@ponytail
 ```
 
-Not `brew bundle`: it treats *outdated* as *missing* and upgrades it. `--formula` stops a
-name from resolving to a cask.
-
-| | why |
-|---|---|
-| `gh` | GitHub sign-in and SSH key upload in one step |
-| `powerlevel10k` `zsh-autosuggestions` `zsh-completions` `fzf` `autojump` | the shell, §5 |
-| `ripgrep` | search |
-| `tmux` | long jobs survive a closed terminal |
-| `htop` | `top` can't sort by RSS interactively |
-| `gnupg` | for signing commits and tags (nothing turns that on yet) |
-| `go` | brew's go, no goenv. Since 1.21 a `go.mod` `toolchain` line fetches the version a project needs |
-| `cmake` `ninja` | all of C/C++. Compilers come from the CLT. No vcpkg, no Conan |
-| `shellcheck` `shfmt` `pre-commit` | writing shell |
-| `ollama` | the runner only (~30 MB). Pull models deliberately, 0.3–3 GB each |
-
-When the need shows up:
-
-| | |
-|---|---|
-| `fd` | `find` that respects `.gitignore` |
-| `bat` | highlighted `cat`, as `bcat`. Never aliased over `cat` |
-| `eza` | `ls` with git columns, aliased only when installed |
-| `tree` | a directory's shape on one screen |
-| `yq` | `jq` for YAML |
-| `direnv` | per-directory env. Needs a shell hook, so it's opt-in |
-| `zoxide` | installed, **not** wired: it fights autojump over `j`. Pick one |
-| `tectonic` | LaTeX for a paper without 5 GB of MacTeX |
-| `redis` | for experiments, never started as a service |
-| `mkcert` | locally-trusted TLS certs |
-| `p7zip` | archives Archive Utility won't open |
-| `poppler` | `pdftotext`, `pdfimages` |
-| `gifsicle` | screen-recording GIFs down to attachable |
-
-## 2. Languages: one manager each
-
-Two managers for one language is how a shell runs the wrong interpreter without telling you.
-
-**Python is uv's.** No conda, pyenv, `pip install` or global venv.
-
-```sh
-curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh   # → ~/.local/bin
-uv python install --default 3.13
-```
-
-`--default` puts `python` and `python3` in `~/.local/bin`, which is first on PATH. Without
-it, `/usr/bin/python3` is 3.9 with no pip, and brew's `python@3.14` arrives uninvited as a
-dependency of pre-commit, ollama and autojump and wins `python3`. Per project, run `uv sync`
-and commit `uv.lock`.
-
-**Node is nvm's**, for several versions side by side.
-
-```sh
-v=$(gh api repos/nvm-sh/nvm/releases/latest -q .tag_name)     # a tag, never master
-curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$v/install.sh" | PROFILE=/dev/null bash
-. ~/.nvm/nvm.sh && nvm install --lts && nvm alias default 'lts/*'
-for b in node npm npx; do ln -sf "$(dirname "$(nvm which default)")/$b" ~/.local/bin/$b; done
-```
-
-- Default to `lts/*`, not a number. A default pinned to `20` stayed on 20 after 24 was
-  installed.
-- The symlinks let `nvm.sh` load lazily: loaded eagerly it cost 943 ms, 71% of shell
-  startup. They also let hooks, LaunchAgents and cron, which never read `.zshrc`, find node.
-  Re-run the loop after each LTS bump.
-- `~/.zshenv` is the one file every zsh reads. It puts `~/.local/bin` on PATH, guarded:
-  `case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac`
-- Check in a clean environment, not in your own shell (that one already has nvm loaded):
-  `env -i HOME=$HOME /bin/zsh -c 'command -v node npm npx'`
-
-**Go**: brew `go` (§1). `~/go/bin` goes at the end of PATH so a project's toolchain wins.
-
-**Rust**: rustup, and only when needed. Never `brew install rust`; the two fight over
-`~/.cargo/bin`. `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path`.
-§5 already puts `~/.cargo/bin` on PATH.
-
-**C/C++**: CLT compilers, `cmake`, `ninja`.
-
-## 3. Apps
-
-Install one cask at a time, and only if the app isn't already in `/Applications`: a cask
-over an app dragged in from a `.dmg` fails. No casks in any bundle file.
-
-| app | `brew install --cask …` | note |
-|---|---|---|
-| VS Code | `visual-studio-code` | 👤 Settings Sync is a GitHub login |
-| iTerm2 | `iterm2` | the bundle is `iTerm.app`. Ships `cc-status`, which the Claude Code hooks call |
-| Obsidian | `obsidian` | §4 |
-| Raycast | `raycast` | 👤 the ⌘-Space swap, §8 |
-| Google Chrome | `google-chrome` | DevTools, and checking what Safari renders differently |
-| Docker Desktop | `docker-desktop` | not `brew install docker`, which is CLI-only. Appends to `~/.zprofile`. Watch the build cache (it once reached 76 GB) |
-
-Claude Code isn't a cask here on purpose. The cask doesn't auto-update; the native
-installer (§0) does.
-
-## 4. My tools
-
-Clones live under `~/devpro/ing/`. Each repo's README is the authority; this is the short
-form.
+- 👤 `adversarial-audit` is a local plugin with no remote, and it's read where it sits. Copy
+  the old Mac's `~/devpro/adversarial-audit-plugin` to the same path (`settings.json` names
+  it), then:
+  `claude plugin marketplace add ~/devpro/adversarial-audit-plugin && claude plugin install adversarial-audit@ing-local`
+- **Copy `~/.claude/settings.json` (§0), never symlink it.** Claude Code rewrites the file
+  itself (plugin registrations, key order). If starting from scratch, it looks like this:
+  - `effortLevel: xhigh` (also under `modelSettings`), `alwaysThinkingEnabled`,
+    `enableWorkflows`, `skipWorkflowUsageWarning` and `ultracode`.
+  - Allow `Bash`, `Read`, `Edit`, `Write` and `WebFetch`. Also allow `Skill(<name>)` and
+    `Skill(<name>:*)` for the superpowers skills, `deep-research`, `claude-api` and
+    `update-config`.
+  - Deny every spelling of `rm -rf` (`-rf -fr -Rf -fR`, `-r -f`, `-f -r`,
+    `--recursive --force`, `--force --recursive`).
+  - Deny force-push with the flag anywhere (`git push --force*`, `git push -f*`,
+    `git push *--force*`, `git push *-f *`).
+  - Deny `git reset --hard*` and `git clean -f*`, `-d*` and `--force*`.
+- Hooks: witness adds four (below). 👤 The rest come from **iTerm2 → Install Claude Code
+  Integration**, which creates `~/.config/iterm2/cc-status` (a symlink into `iTerm.app`),
+  its hooks and its profile triggers. Hooks in a copied `settings.json` fail until it has
+  run. Don't write them by hand.
 
 ### witness: a dated history of how I think and work, from my AI sessions
 
 Go, served to Claude Code over MCP. <https://github.com/IngTian/witness>
 
+👤 **First**, if you want the history: with no Claude sessions running on the old Mac (the DB
+is in WAL mode), copy its `~/.local/share/witness` or `~/.local/share/claude-witness` to
+`~/.local/share/witness` here. Any witness command creates an empty archive, and that one wins
+over a copy made later. If it's already too late: `witness export --all <dir>` on the old Mac,
+then `witness merge <dir>` here.
+
 ```sh
-git clone https://github.com/IngTian/witness ~/devpro/ing/witness
-cd ~/devpro/ing/witness && ./install.sh claude
+command -v go >/dev/null || brew install --formula go     # §3 has it too; witness needs it now
+git clone https://github.com/IngTian/witness ~/devpro/ing/witness &&
+  cd ~/devpro/ing/witness && ./install.sh claude
 ```
 
 - Needs `go` 1.25+, `claude` on PATH, and about 450 MB for the embedding model, downloaded
@@ -177,70 +151,41 @@ cd ~/devpro/ing/witness && ./install.sh claude
 - **The clone is the install.** The hooks and the MCP entry point into it by absolute path,
   so don't move it. To update: `git pull && ./install.sh claude`.
 - `install.sh` builds the binary, fetches the model, merges four hooks into
-  `~/.claude/settings.json`, and registers the MCP server `witness` at user scope. If
-  `claude` isn't on PATH, that registration fails with only a warning, so check that
-  `claude mcp list` shows `witness`.
-- Run without a TTY (by Claude, say), it silently skips creating the `witness` command.
-  Add it from the clone:
-  `printf '#!/usr/bin/env bash\nexec "%s/hooks/witness.sh" "$@"\n' "$PWD" > ~/.local/bin/witness && chmod +x ~/.local/bin/witness`
+  `~/.claude/settings.json` (replacing the old Mac's witness hooks in a copied file), and
+  registers the MCP server `witness` at user scope. If `claude` isn't on PATH, that
+  registration fails with only a warning, so check that `claude mcp list` shows `witness`.
+- Run without a TTY (by Claude, say), it silently skips creating the `witness` command. Add it:
+  `printf '#!/usr/bin/env bash\nexec "%s/hooks/witness.sh" "$@"\n' ~/devpro/ing/witness > ~/.local/bin/witness && chmod +x ~/.local/bin/witness`
 - Don't also install it as a Claude Code plugin. That adds a second set of hooks.
-- 👤 History lives in `~/.local/share/witness` (older installs: `~/.local/share/claude-witness`).
-  To keep it, copy that folder from the old Mac. witness has `export` but no import.
 - Check: `witness doctor`.
 
-### daylogs: weight, food and spending in the terminal, typed by hand
+### ollama
 
-Python. <https://github.com/IngTian/daylogs>
+`brew install --formula ollama`. The runner only (~30 MB). Pull models deliberately; they're
+0.3–3 GB each.
 
-```sh
-uv tool install daylogs          # → day
-```
+## 2. Terminal & shell
 
-- Data lives in `~/Documents/daylogs/`: the DB, `config.toml`, `memory.md`, and an
-  `inbox/` for phone photos. It expects iCloud **Desktop & Documents** sync; that's how the
-  phone photos and the DB reach the Mac.
-- Keep every Mac on the same version. An older version can move the shared DB's schema
-  stamp backwards.
-- Estimates and the daily read call `claude -p`. Everything else works without it.
-- Check: `day --version`.
-
-### trading-desk: a trading book in the terminal
-
-Python. A SQLite book, a Textual TUI, and a checker that won't let the record contradict
-itself. <https://github.com/IngTian/trading-desk>
+| app | cask | bundle | note |
+|---|---|---|---|
+| iTerm2 | `iterm2` | `iTerm.app` | ships `cc-status` for Claude Code (§1) |
 
 ```sh
-uv tool install trading-desk     # → desk, desk-migrate, desk-check
+brew install --formula powerlevel10k zsh-autosuggestions zsh-completions fzf autojump \
+  ripgrep tmux htop
 ```
 
-- The book is `~/Documents/trading-desk/hub.db`. Its README wants the live book **out of**
-  sync folders (one writer at a time). With Desktop & Documents sync on, set
-  `TRADING_DESK_HOME` to an unsynced folder. Copies off the machine are snapshots:
-  `sqlite3 hub.db "VACUUM INTO '<dest>.db'"`.
-- 👤 Moving Macs: copy `hub.db` (and `config.toml`) across, then run `desk-migrate --check`.
-- Check: `desk --version`.
+| | why |
+|---|---|
+| `powerlevel10k` | the prompt. 👤 `p10k configure`, or copy `~/.p10k.zsh` (~90 KB of wizard answers) |
+| `zsh-autosuggestions` `zsh-completions` | grey inline suggestions; extra completions |
+| `fzf` | ⌃R history search that's actually usable |
+| `autojump` | `j <partial-dir>` |
+| `ripgrep` | search |
+| `tmux` | long jobs survive a closed terminal |
+| `htop` | `top` can't sort by RSS interactively |
 
-### manifold: a mountain as breathing points of light
-
-A macOS screensaver and live wallpaper in Swift, built with the CLT's `swiftc` (no Xcode).
-<https://github.com/IngTian/manifold>
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/IngTian/manifold/main/scripts/install.sh | bash -s -- all
-```
-
-- `all` installs the screensaver (`~/Library/Screen Savers/Manifold.saver`) and the
-  wallpaper (`/Applications/Manifold Wallpaper.app`). With no argument, only the screensaver.
-- 👤 Pick it in System Settings → Screen Saver → Other → Manifold. For the wallpaper, use
-  the ⛰ menu-bar icon → Launch at login. If that toggle fails, add the app under Login Items.
-- To update, re-run the same line.
-
-### Obsidian
-
-`brew install --cask obsidian`. My vaults are git repos that I clone myself, and each one
-carries its own `.obsidian/`. Nothing to configure here.
-
-## 5. Shell (zsh)
+### zsh
 
 `~/.zshrc` is **one line, forever**:
 
@@ -254,12 +199,12 @@ conda each prepended twice: seven installers had each appended a block, and noth
 removed one.
 
 ```zsh
-# ~/.config/zsh/rc.zsh. `ZSH_PROFILE=1 exec zsh` prints what each unit costs.
+# ~/.config/zsh/rc.zsh. `MACBOOT_ZSH_PROFILE=1 exec zsh` prints what each unit costs.
 [[ -n $_rc_sourced ]] && return
 _rc_sourced=1
-[[ -n $ZSH_PROFILE ]] && zmodload zsh/datetime
+[[ -n $MACBOOT_ZSH_PROFILE ]] && zmodload zsh/datetime
 for _f in ~/.config/zsh/conf.d/*.zsh(N); do
-  if [[ -n $ZSH_PROFILE ]]; then
+  if [[ -n $MACBOOT_ZSH_PROFILE ]]; then
     _t=$EPOCHREALTIME; source $_f
     printf '%7.1f ms  %s\n' $(( (EPOCHREALTIME - _t) * 1000 )) ${_f:t} >&2
   else
@@ -288,12 +233,15 @@ numbered under 50 runs its own compinit: gcloud's cost 297 ms at `20-` and almos
 | `45-nvm` | lazy: an `nvm` function that sources `nvm.sh` the first time it's called |
 | `50-compinit` | the only `compinit`. `-i`, so it never shows the insecure-directories prompt. A full audit when `~/.zcompdump` is more than 24 h old, otherwise `-C`. Menu select, case-insensitive matching, completion cache |
 | `60-keys` | `bindkey -e` explicitly (zsh switches to vi mode if `$EDITOR` contains "vi"). ↑/↓ search history by prefix, including `^[OA`/`^[OB` for tmux. ⌃←/⌃→ move by word |
-| `70-aliases` | each one guarded by `(($+commands[x]))`: eza `ls/ll/la/lt`; `bcat`; `g gs gd gds gl`; `mkcd`; `ports` (`lsof -nP -iTCP -sTCP:LISTEN`); `rgh`; `fda`; `reload='exec zsh -l'` |
+| `70-aliases` | each one guarded by `(($+commands[x]))`: eza `ls/ll/la/lt`; `bcat`; `g gs gd gds gl`; `mkcd`; `ports` (`lsof -nP -iTCP -sTCP:LISTEN`); `rgh`; `fda`; `reload='exec zsh -l'`; `zprofile` |
 | `80-plugins` | autosuggestions (strategy `history completion`, buffer max 80, both set before sourcing); fzf's shipped `completion.zsh` and `key-bindings.zsh`; autojump's `etc/profile.d/autojump.sh` (a function, because `alias j=autojump` can't `cd`) |
 | `90-p10k` | the powerlevel10k theme, then `~/.p10k.zsh` |
 
-Every unit, verbatim: `git show f71dd6f:shell/conf.d/<unit>.zsh`. Before opening a new
-terminal, run `for f in ~/.config/zsh/rc.zsh ~/.config/zsh/conf.d/*.zsh; do zsh -n $f || echo BROKEN $f; done`.
+Copying beats rewriting. 👤 My current Mac keeps these units in `~/.config/macboot/conf.d/`
+and my own (gcloud, aliases) in `~/.config/zsh/conf.d/`. On the new Mac, both go into
+`~/.config/zsh/conf.d/`. Every unit is also in history: `git show f71dd6f:shell/conf.d/<unit>.zsh`.
+Before opening a new terminal, run
+`for f in ~/.config/zsh/rc.zsh ~/.config/zsh/conf.d/*.zsh; do zsh -n $f || echo BROKEN $f; done`.
 A syntax error here breaks every new terminal, including the one you'd use to fix it.
 
 Don't:
@@ -301,10 +249,32 @@ Don't:
 - set `MANPATH` (one entry replaces the PATH-derived list and breaks `man ls`) or
   `INFOPATH` (macOS has no `info`, and the variable grows on every `exec zsh`);
 - call `compinit` outside unit 50, or `source ~/.zshrc` to reload (use `exec zsh -l`);
-- alias `python`, `pip`, `grep`→`rg` or `cat`→`bat`;
-- wire up both zoxide and autojump.
+- alias `python`, `pip`, `grep`→`rg` or `cat`→`bat`.
 
-## 6. Git
+## 3. Development
+
+| app | cask | bundle | note |
+|---|---|---|---|
+| VS Code | `visual-studio-code` | `Visual Studio Code.app` | 👤 Settings Sync is a GitHub login |
+| Docker Desktop | `docker-desktop` | `Docker.app` | 👤 sudo: it links `docker` into `/usr/local/bin`. Not `brew install docker` (CLI only). Watch the build cache; it once reached 76 GB |
+| Google Chrome | `google-chrome` | `Google Chrome.app` | DevTools, and checking what Safari renders differently |
+
+```sh
+brew install --formula git-lfs go cmake ninja shellcheck shfmt pre-commit gnupg mkcert redis
+git lfs install
+```
+
+| | why |
+|---|---|
+| `git-lfs` | large files; `git lfs install` adds its filter to `~/.gitconfig` |
+| `go` | brew's go, no goenv. Since 1.21 a `go.mod` `toolchain` line fetches the version a project needs |
+| `cmake` `ninja` | all of C/C++. Compilers come from the CLT. No vcpkg, no Conan |
+| `shellcheck` `shfmt` `pre-commit` | writing shell |
+| `gnupg` | for signing commits and tags (nothing turns that on yet) |
+| `mkcert` | locally-trusted TLS certs |
+| `redis` | for experiments, never started as a service |
+
+### git
 
 `~/.config/git/config` holds the defaults I want everywhere:
 
@@ -340,54 +310,176 @@ Don't:
 `.vscode/` is deliberately not on the list; if it were, a repo couldn't re-include its
 `launch.json`.
 
-👤 **Identity: ask me, never derive it.** The work identity goes in `~/.gitconfig`.
-Personal repos get theirs by directory:
+👤 **Identity: ask me, never derive it.** The work identity goes in `~/.gitconfig`. Personal
+repos get theirs by directory. Append this to `~/.gitconfig` after its `[user]` block, not to
+`~/.config/git/config`, which git reads first, so the work identity would win:
 
 ```ini
-[includeIf "gitdir:~/devpro/ing/"]       # trailing slash required; must come after [user]
+[includeIf "gitdir:~/devpro/ing/"]       # the trailing slash is required
 	path = ~/devpro/ing/.gitconfig
 ```
 
 Check from inside a repo with `git config --includes --get user.email`. A missing include
 file is ignored silently.
 
-## 7. Claude Code
+### Languages: one manager each
 
-It's installed in §0. Then:
+Two managers for one language is how a shell runs the wrong interpreter without telling you.
+
+**Python is uv's.** No conda, pyenv, `pip install` or global venv.
 
 ```sh
-claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin install superpowers@claude-plugins-official
-claude plugin install frontend-design@claude-plugins-official
-claude plugin marketplace add DietrichGebert/ponytail
-claude plugin install ponytail@ponytail
+curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh &&   # → ~/.local/bin
+  uv python install --default 3.13
 ```
 
-- 👤 `adversarial-audit` is a local plugin with no remote. Copy its directory from the old
-  Mac, then run `claude plugin marketplace add <dir>`.
-- **Copy `~/.claude/settings.json`, never symlink it.** Claude Code rewrites the file
-  itself (plugin registrations, key order). 👤 Bring over the old Mac's. If starting from
-  scratch, it looks like this:
-  - `effortLevel: xhigh` and `alwaysThinkingEnabled`.
-  - Allow `Bash`, `Read`, `Edit`, `Write` and `WebFetch`.
-  - Deny every spelling of `rm -rf` (`-rf -fr -Rf -fR`, `-r -f`, `-f -r`,
-    `--recursive --force`, `--force --recursive`).
-  - Deny force-push with the flag anywhere (`git push --force*`, `git push -f*`,
-    `git push *--force*`, `git push *-f *`).
-  - Deny `git reset --hard*` and `git clean -f*`, `-d*` and `--force*`.
-- Hooks: witness's `install.sh` adds its own. The rest call iTerm2's
-  `~/.config/iterm2/cc-status`, a symlink into `iTerm.app`.
-- 👤 Private, and never in this repo: `~/.claude/CLAUDE.md`, `~/.claude/memory/`, and the
-  per-project memory under `~/.claude/projects/`. Copy them across by hand.
+`--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
+3.9 with no pip, and brew's `python3` arrives uninvited as a dependency of pre-commit,
+autojump and ollama and wins. Per project, run `uv sync` and commit `uv.lock`.
 
-## 8. By hand 👤, and why
+**Node is nvm's**, for several versions side by side.
+
+```sh
+v=$(gh api repos/nvm-sh/nvm/releases/latest -q .tag_name) &&    # a tag, never master
+  curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$v/install.sh" | PROFILE=/dev/null bash &&
+  . ~/.nvm/nvm.sh && nvm install --lts && nvm alias default 'lts/*' &&
+  n=$(nvm which default) && for b in node npm npx; do ln -sf "${n%/node}/$b" ~/.local/bin/$b; done
+```
+
+- Default to `lts/*`, not a number. A default pinned to `20` stayed on 20 after 24 was
+  installed.
+- The links let `nvm.sh` load lazily: loaded eagerly it cost 943 ms, 71% of shell startup.
+  They also let hooks and cron, which never read `.zshrc`, find node. Re-run the last line
+  after each LTS bump, in a shell where `nvm` is loaded. If `nvm` isn't loaded, `nvm which`
+  prints nothing and the links point at themselves.
+- Check in a clean environment, not in your own shell (that one already has nvm loaded):
+  `env -i HOME=$HOME /bin/zsh -c 'command -v node npm npx'`
+
+**Go**: brew `go`. `~/go/bin` goes at the end of PATH so a project's toolchain wins. The
+linters I use:
+`for p in honnef.co/go/tools/cmd/staticcheck github.com/kisielk/errcheck golang.org/x/tools/cmd/deadcode; do go install $p@latest; done`
+
+**Rust**: rustup, never `brew install rust`; the two fight over `~/.cargo/bin`.
+`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && ~/.cargo/bin/rustup component add rust-analyzer`.
+§2 already puts `~/.cargo/bin` on PATH.
+
+**C/C++**: CLT compilers, `cmake`, `ninja`.
+
+## 4. Markets & research
+
+| app | cask | bundle | note |
+|---|---|---|---|
+| TradingView | `tradingview` | `TradingView.app` | 👤 sign in |
+
+```sh
+brew install --formula tectonic poppler ghostscript
+uv tool install kaggle     # 👤 then put the API token from kaggle.com → Settings into ~/.kaggle/
+```
+
+| | why |
+|---|---|
+| `tectonic` | LaTeX for a paper, without 5 GB of MacTeX |
+| `poppler` | `pdftotext`, `pdfimages` |
+| `ghostscript` | PDF and PostScript conversion |
+| `kaggle` | datasets and competitions from the terminal |
+
+### trading-desk: a trading book in the terminal
+
+Python. A SQLite book, a Textual TUI, and a checker that won't let the record contradict
+itself. <https://github.com/IngTian/trading-desk>
+
+```sh
+uv tool install trading-desk     # → desk, desk-migrate, desk-check
+```
+
+- The book is `~/Documents/trading-desk/hub.db`. I keep it there, inside iCloud Desktop &
+  Documents sync, so it arrives with the rest of `~/Documents`, and I open it from one Mac
+  at a time. The tool's README prefers an unsynced folder (set `TRADING_DESK_HOME`), and
+  copies off the machine as snapshots: `sqlite3 hub.db "VACUUM INTO '<dest>.db'"`.
+- On a new Mac, run `desk-migrate --check` before the first `desk`.
+- Check: `desk --version`.
+
+## 5. Notes, tasks & life
+
+| app | cask | bundle | note |
+|---|---|---|---|
+| Obsidian | `obsidian` | `Obsidian.app` | my vaults are git repos I clone myself; each carries its own `.obsidian/` |
+| TickTick | `ticktick` | `TickTick.app` | from the App Store on my current Mac; the cask works too. 👤 sign in |
+| Google Drive | `google-drive` | `Google Drive.app` | 👤 sudo (a `.pkg`). Also installs the Docs, Sheets and Slides apps |
+| WPS Office | `wpsoffice` | `wpsoffice.app` | |
+
+### daylogs: weight, food and spending in the terminal, typed by hand
+
+Python. <https://github.com/IngTian/daylogs>
+
+```sh
+uv tool install daylogs && mkdir -p ~/Documents/daylogs/inbox     # → day
+```
+
+- Data lives in `~/Documents/daylogs/`: the DB, `config.toml`, `memory.md`, and `inbox/` for
+  phone photos (daylogs never creates it). It expects iCloud **Desktop & Documents** sync;
+  that's how the phone photos and the DB reach the Mac.
+- Keep every Mac that shares the DB on the same version: an older one can move the schema
+  stamp backwards. Run `uv tool upgrade daylogs` on the old Mac too, or pin this one with
+  `uv tool install daylogs==<old Mac's day --version>`.
+- Estimates and the daily read call `claude -p`. Everything else works without it.
+- Check: `day --version`.
+
+## 6. Mac utilities
+
+| app | cask | bundle | note |
+|---|---|---|---|
+| Raycast | `raycast` | `Raycast.app` | 👤 the ⌘-Space swap, §9 |
+| Snipaste | `snipaste` | `Snipaste.app` | screenshots: snip, annotate, pin to screen |
+| AirStats | `airstats` | `AirStats.app` | menu-bar system monitor |
+
+```sh
+brew install --formula ffmpeg p7zip gifsicle
+```
+
+`ffmpeg` handles audio and video. `p7zip` opens the archives Archive Utility won't.
+`gifsicle` shrinks screen-recording GIFs down to something you can attach.
+
+### manifold: a mountain as breathing points of light
+
+A macOS screensaver and live wallpaper in Swift, built with the CLT's `swiftc` (no Xcode).
+<https://github.com/IngTian/manifold>
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IngTian/manifold/main/scripts/install.sh | bash -s -- all
+```
+
+- `all` installs the screensaver (`~/Library/Screen Savers/Manifold.saver`) and the
+  wallpaper (`/Applications/Manifold Wallpaper.app`). With no argument, only the screensaver.
+- 👤 Pick it in System Settings → Screen Saver → Other → Manifold. For the wallpaper, use
+  the ⛰ menu-bar icon → Launch at login. If that toggle fails, add the app under Login Items.
+- To update, re-run the same line.
+
+## 7. Chat, calls & remote
+
+| app | cask | bundle | note |
+|---|---|---|---|
+| WeChat | `wechat` | `WeChat.app` | from the App Store on my current Mac; the cask works too |
+| Discord | `discord` | `Discord.app` | |
+| Slack | `slack` | `Slack.app` | |
+| Zoom | `zoom` | `zoom.us.app` | 👤 sudo (a `.pkg`) |
+| Windows App | `windows-app` | `Windows App.app` | 👤 sudo (a `.pkg`). RDP to my Windows desktop |
+
+## 8. Games
+
+| app | cask | bundle |
+|---|---|---|
+| Steam | `steam` | `Steam.app` |
+
+## 9. By hand 👤, and why
 
 | step | why it isn't automated |
 |---|---|
 | Xcode CLT dialog | GUI-only, and accepting a licence for someone isn't OK |
-| Homebrew sudo password | needs a TTY |
-| `gh auth login`, `claude` login | browser plus a one-time code |
+| Homebrew's sudo password, and the `.pkg` casks' | needs a TTY |
+| `gh auth login`, `claude` login, app sign-ins | browser plus a one-time code |
 | git identity | only I know which email goes where |
+| iTerm2 → Install Claude Code Integration | iTerm2 owns the `cc-status` link, its hooks and its profile triggers |
 | `p10k configure`, or copy `~/.p10k.zsh` across | ~90 KB of wizard answers |
 | Raycast on ⌘-Space: set Raycast's hotkey to ⌘-Space **first**, then System Settings → Keyboard → Keyboard Shortcuts → Spotlight → untick it | in that order the key is never dead. Scripting it means splicing `symbolichotkeys` and logging out |
 | choosing the screensaver | WallpaperAgent owns and rewrites the selection store |
@@ -396,17 +488,20 @@ claude plugin install ponytail@ponytail
 | Time Machine destination | enrolling a disk can erase it |
 | Full Disk Access for iTerm, if wanted | TCC is SIP-protected |
 | `chsh -s /bin/zsh`, only if `dscl . -read ~ UserShell` isn't zsh already | PAM password prompt |
-| data from the old Mac: `~/.local/share/witness`, `~/Documents/trading-desk/`, `~/.p10k.zsh`, `~/.ssh`, the private `~/.claude/` files | not mine to sync blindly. daylogs arrives through iCloud |
+| data from the old Mac: `~/.claude/` (§0), witness history (§1, *before* installing), zsh units (§2), `~/.p10k.zsh`, `~/.ssh`, `~/.kaggle/`, `~/devpro/adversarial-audit-plugin` | not mine to sync blindly. daylogs and trading-desk arrive through iCloud |
 
 ## Not installed, on purpose
 
 - **brew `git` and `jq`.** Apple ships both: `git` with the CLT, and `/usr/bin/jq`. A
   second copy that shadows a working one isn't worth a minor version.
 - **brew `python`, pyenv, conda, brew `node`, brew `rust`, goenv, vcpkg, Conan.** One
-  manager per language (§2).
+  manager per language (§3).
 - **brew `zsh`.** `/bin/zsh` is already the default, and brew's would need a root edit to
   `/etc/shells`.
 - **MacTeX** (tectonic covers it) and **ollama models** (pulled by choice).
 - **`defaults write` preferences.** They're taste, so I set them by hand.
 - **Nix, Ansible, chezmoi.** This runs before any package manager exists.
+- **Not on my current Mac, so not here:** `fd`, `bat`, `eza`, `tree`, `yq`, `direnv` and
+  `zoxide`. The aliases in `70-aliases` light up if any of them gets installed. Don't wire
+  zoxide next to autojump: they fight over `j`.
 - **MDM removal.** If the Mac is managed, warn and continue; Jamf reinstalls the agent anyway.
