@@ -24,11 +24,10 @@ decisions were always the valuable part. The scripted version is still in histor
 | 2 | Terminal & shell | iTerm2, the CLI basics, zsh |
 | 3 | Development | VS Code, git, languages, Docker, Chrome |
 | 4 | Markets & research | TradingView, trading-desk, Kaggle, LaTeX, PDFs |
-| 5 | Notes, tasks & life | Obsidian, TickTick, daylogs, Google Drive, WPS Office |
+| 5 | Notes, tasks & life | Obsidian, TickTick, daylogs, Google Drive |
 | 6 | Mac utilities | Raycast, Snipaste, AirStats, manifold, media CLIs |
 | 7 | Chat, calls & remote | WeChat, Discord, Windows App |
-| 8 | Games | Steam |
-| 9 | By hand 👤 | what stays human, and why |
+| 8 | By hand 👤 | what stays human, and why |
 
 ## Rules for whoever runs this
 
@@ -78,10 +77,10 @@ xcode-select --install     # 👤 dialog: Install, Agree, and wait until it's do
 # ~/.local/bin (uv, claude, the node links) on PATH for every zsh, and ahead of brew in login shells
 grep -qs '\.local/bin' ~/.zshenv ||
   echo 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac' >> ~/.zshenv
-grep -qs 'brew.*shellenv' ~/.zprofile || cat >> ~/.zprofile <<'EOF'
-if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
-typeset -U path; path=(~/.local/bin $path)   # path_helper and shellenv just pushed it behind brew
-EOF
+grep -qs 'brew.*shellenv' ~/.zprofile ||   # Homebrew's installer may already have added one
+  echo 'if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi' >> ~/.zprofile
+grep -qs 'path=(~/.local/bin' ~/.zprofile ||
+  echo 'typeset -U path; path=(~/.local/bin $path)   # path_helper and shellenv just pushed it behind brew' >> ~/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"; export PATH="$HOME/.local/bin:$PATH"   # this shell too
 
 brew install gh && gh auth login --git-protocol ssh    # 👤 browser; uploads ~/.ssh's key, or creates one
@@ -179,9 +178,21 @@ login. Pull models deliberately, since they're 0.3–3 GB each. The one I use is
 
 ## 2. Terminal & shell
 
-| app | cask | bundle | note |
-|---|---|---|---|
-| iTerm2 | `iterm2` | `iTerm.app` | 👤 then **iTerm2 → Install Claude Code Integration**. It creates `~/.config/iterm2/cc-status` (a link into `iTerm.app`), its Claude Code hooks and its profile triggers. Don't write those by hand. 👤 Profile font: MesloLGS NF (see `powerlevel10k` below) |
+### iTerm2
+
+`brew install --cask iterm2`. The bundle is `iTerm.app`. Mine is close to stock: one
+`Default` profile, no scripts, no dynamic profiles and no shell integration. So 👤 set these
+by hand rather than copying the plist, which is mostly window frames and per-machine state:
+
+- **iTerm2 → Install Claude Code Integration.** It creates `~/.config/iterm2/cc-status` (a
+  link into `iTerm.app`), its Claude Code hooks, the profile's two Workgroup triggers and
+  the Claude Code workgroup (Chat, Diff, Code Review). Don't write any of those by hand.
+- **Settings → General → Magic → Enable Python API.** cc-status reports through `it2`,
+  which refuses to run without it.
+- **Profile `Default`:** font MesloLGS NF 18 (see `powerlevel10k` below); Window →
+  Transparency 20, Blur 10.
+- **Appearance → Theme: Dark.** **General → Selection → Applications in terminal may access
+  clipboard**, so OSC 52 copies from tmux and ssh reach macOS.
 
 ```sh
 brew install --formula powerlevel10k zsh-autosuggestions zsh-completions fzf autojump \
@@ -190,7 +201,7 @@ brew install --formula powerlevel10k zsh-autosuggestions zsh-completions fzf aut
 
 | | why |
 |---|---|
-| `powerlevel10k` | the prompt. 👤 Run `p10k configure` inside iTerm2, which also installs the MesloLGS NF font. Or copy `~/.p10k.zsh` (~90 KB of wizard answers) plus `~/Library/Fonts/MesloLGS NF *.ttf`, and set the font in the iTerm2 profile. Without the font, the icons show as boxes |
+| `powerlevel10k` | the prompt. 👤 Copy `~/.p10k.zsh` (~90 KB of wizard answers) plus `~/Library/Fonts/MesloLGS NF *.ttf`. Or re-run `p10k configure` inside iTerm2, which also installs the font. My answers: Nerd Font v3, lean, unicode, 24h, 2 lines, disconnected, no frame, compact, many icons, fluent, transient prompt, instant prompt verbose. Without the font, the icons show as boxes |
 | `zsh-autosuggestions` `zsh-completions` | grey inline suggestions; extra completions |
 | `fzf` | ⌃R history search that's actually usable |
 | `autojump` | `j <partial-dir>` |
@@ -243,16 +254,19 @@ numbered under 50 runs its own compinit: gcloud's cost 297 ms at `20-` and almos
 | `10-history` | 200 000 / 200 000; `EXTENDED_HISTORY SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE HIST_REDUCE_BLANKS HIST_VERIFY HIST_FCNTL_LOCK` |
 | `20-options` | `INTERACTIVE_COMMENTS NO_BEEP NO_FLOW_CONTROL`, and nothing else |
 | `30-fpath` | brew's `share/zsh-completions` and `share/zsh/site-functions` |
-| `45-nvm` | lazy: an `nvm` function that sources `nvm.sh` the first time it's called |
+| `45-nvm` | lazy: an `nvm` function that sources `nvm.sh` and its completion the first time it's called. `MACBOOT_NVM_EAGER=1` loads it up front, for an `.nvmrc` chpwd hook |
 | `50-compinit` | the only `compinit`. `-i`, so it never shows the insecure-directories prompt. A full audit when `~/.zcompdump` is more than 24 h old, otherwise `-C`. Menu select, case-insensitive matching, completion cache |
-| `60-keys` | `bindkey -e` explicitly (zsh switches to vi mode if `$EDITOR` contains "vi"). ↑/↓ search history by prefix, including `^[OA`/`^[OB` for tmux. ⌃←/⌃→ move by word |
-| `70-aliases` | each one guarded by `(($+commands[x]))`: eza `ls/ll/la/lt`; `bcat`; `g gs gd gds gl`; `mkcd`; `ports` (`lsof -nP -iTCP -sTCP:LISTEN`); `rgh`; `fda`; `reload='exec zsh -l'`; `zprofile` |
+| `60-keys` | `bindkey -e` explicitly (zsh switches to vi mode if `$EDITOR` contains "vi"). ↑/↓ search history by prefix, including `^[OA`/`^[OB` for tmux. ⌃←/⌃→ move by word; Home and End work; fn-⌫ deletes forward instead of typing `~`; ⌥⌫ deletes a word |
+| `70-aliases` | guarded by `(($+commands[x]))` wherever they name an optional tool: eza `ls/ll/la/lt` (otherwise BSD `ls -G`, `ll`, `la`), `bcat` (bat), `rgh` (rg), `fda` (fd), `jqc` (jq). Unguarded: `g gs gd gds gl`, `.. ... ....`, `mkcd`, `path`/`fpath` (one entry per line), `df -h`, `du -h`, `ports` (`lsof -nP -iTCP -sTCP:LISTEN`), `localip`, `reload='exec zsh -l'`, `zprofile` |
 | `80-plugins` | autosuggestions (strategy `history completion`, buffer max 80, both set before sourcing); fzf's shipped `completion.zsh` and `key-bindings.zsh`; autojump's `etc/profile.d/autojump.sh` (a function, because `alias j=autojump` can't `cd`) |
-| `90-p10k` | the powerlevel10k theme, then `~/.p10k.zsh` |
+| `90-p10k` | brew's `share/powerlevel10k` theme, otherwise a `~/powerlevel10k` clone, then `~/.p10k.zsh` |
 
 Copying beats rewriting. 👤 My current Mac keeps these units in `~/.config/macboot/conf.d/`
 and my own aliases in `~/.config/zsh/conf.d/90-mine.zsh`. On the new Mac, both go into
-`~/.config/zsh/conf.d/`. Leave its `60-gcloud.zsh` behind: that one is work. Every unit is also in history: `git show f71dd6f:shell/conf.d/<unit>.zsh`.
+`~/.config/zsh/conf.d/`. Leave behind its `60-gcloud.zsh` (work), its `README.md` (it
+describes the old two-directory merge), and the `~/powerlevel10k` clone (from January,
+never pulled; brew's theme takes precedence). Every unit is also in history:
+`git show f71dd6f:shell/conf.d/<unit>.zsh`.
 Before opening a new terminal, run
 `for f in ~/.config/zsh/rc.zsh ~/.config/zsh/conf.d/*.zsh; do zsh -n $f || echo BROKEN $f; done`.
 A syntax error here breaks every new terminal, including the one you'd use to fix it.
@@ -260,7 +274,7 @@ A syntax error here breaks every new terminal, including the one you'd use to fi
 Don't:
 
 - set `MANPATH` (one entry replaces the PATH-derived list and breaks `man ls`) or
-  `INFOPATH` (macOS has no `info`, and the variable grows on every `exec zsh`);
+  `INFOPATH` yourself (macOS has no `info`; `brew shellenv` already exports it);
 - call `compinit` outside unit 50, or `source ~/.zshrc` to reload (use `exec zsh -l`);
 - alias `python`, `pip`, `grep`→`rg` or `cat`→`bat`.
 
@@ -273,7 +287,7 @@ Don't:
 | Google Chrome | `google-chrome` | `Google Chrome.app` | DevTools, and checking what Safari renders differently |
 
 ```sh
-brew install --formula git-lfs go cmake ninja shellcheck shfmt pre-commit gnupg mkcert redis
+brew install --formula git-lfs go cmake ninja shellcheck shfmt pre-commit gnupg mkcert
 git lfs install
 ```
 
@@ -285,7 +299,6 @@ git lfs install
 | `shellcheck` `shfmt` `pre-commit` | writing shell |
 | `gnupg` | for signing commits and tags (nothing turns that on yet) |
 | `mkcert` | locally-trusted TLS certs |
-| `redis` | a cache for experiments. Run `brew services start redis` only when a project needs it. It runs at login on my current Mac, and nothing uses it |
 
 ### git
 
@@ -422,7 +435,6 @@ uv tool install trading-desk     # → desk, desk-migrate, desk-check
 | Obsidian | `obsidian` | `Obsidian.app` | my vaults are git repos I clone myself; each carries its own `.obsidian/` |
 | TickTick | `ticktick` | `TickTick.app` | from the App Store on my current Mac; the cask works too. 👤 sign in |
 | Google Drive | `google-drive` | `Google Drive.app` | 👤 sudo (a `.pkg`). Also installs the Docs, Sheets and Slides apps |
-| WPS Office | `wpsoffice` | `wpsoffice.app` | |
 
 ### daylogs: weight, food and spending in the terminal, typed by hand
 
@@ -445,7 +457,7 @@ uv tool install daylogs && mkdir -p ~/Documents/daylogs/inbox     # → day
 
 | app | cask | bundle | note |
 |---|---|---|---|
-| Raycast | `raycast` | `Raycast.app` | 👤 the ⌘-Space swap, §9 |
+| Raycast | `raycast` | `Raycast.app` | 👤 the ⌘-Space swap, §8 |
 | Snipaste | `snipaste` | `Snipaste.app` | screenshots: snip, annotate, pin to screen |
 | AirStats | `airstats` | `AirStats.app` | menu-bar system monitor |
 
@@ -481,13 +493,7 @@ curl -fsSL https://raw.githubusercontent.com/IngTian/manifold/main/scripts/insta
 
 Slack and Zoom are on my current Mac for work only, so they aren't listed.
 
-## 8. Games
-
-| app | cask | bundle |
-|---|---|---|
-| Steam | `steam` | `Steam.app` |
-
-## 9. By hand 👤, and why
+## 8. By hand 👤, and why
 
 | step | why it isn't automated |
 |---|---|
@@ -495,7 +501,7 @@ Slack and Zoom are on my current Mac for work only, so they aren't listed.
 | Homebrew's sudo password, and the `.pkg` casks' | needs a TTY |
 | `gh auth login`, `claude` login, app sign-ins | browser plus a one-time code |
 | git identity | only I know which email goes where |
-| iTerm2 → Install Claude Code Integration | iTerm2 owns the `cc-status` link, its hooks and its profile triggers |
+| iTerm2: the Claude Code integration, Enable Python API, profile font, transparency, theme | iTerm2 owns the `cc-status` link, its hooks, triggers and workgroup. The rest is a handful of clicks; the plist is mostly per-machine state |
 | `p10k configure`, or copy `~/.p10k.zsh` across | ~90 KB of wizard answers |
 | Raycast on ⌘-Space: set Raycast's hotkey to ⌘-Space **first**, then System Settings → Keyboard → Keyboard Shortcuts → Spotlight → untick it | in that order the key is never dead. Scripting it means splicing `symbolichotkeys` and logging out |
 | choosing the screensaver | WallpaperAgent owns and rewrites the selection store |
@@ -506,7 +512,7 @@ Slack and Zoom are on my current Mac for work only, so they aren't listed.
 | `chsh -s /bin/zsh`, only if `dscl . -read ~ UserShell` isn't zsh already | PAM password prompt |
 | iCloud sign-in with Desktop & Documents on, before anything writes to `~/Documents` (§0) | Apple ID 2FA. Turned on late, it splits `~/Documents` instead of merging it |
 | `uv tool upgrade daylogs` on the old Mac (§5) | another machine |
-| data from the old Mac: `~/.ssh` and `~/.claude/` (§0), witness history (§1, *before* installing), zsh units (§2), `~/.p10k.zsh` and the MesloLGS NF fonts, `~/.kaggle/`, `~/devpro/adversarial-audit-plugin` | not mine to sync blindly. daylogs and trading-desk arrive through iCloud |
+| data from the old Mac: `~/.ssh` and `~/.claude/` (§0), witness history (§1, *before* installing), zsh units (§2), `~/.p10k.zsh` and the MesloLGS NF fonts, `~/.kaggle/`, `~/devpro/adversarial-audit-plugin`, and `~/.zsh_history` if I want it | not mine to sync blindly. daylogs and trading-desk arrive through iCloud |
 
 ## Not installed, on purpose
 
@@ -519,6 +525,11 @@ Slack and Zoom are on my current Mac for work only, so they aren't listed.
 - **MacTeX** (tectonic covers it) and **ollama models** (pulled by choice).
 - **`defaults write` preferences.** They're taste, so I set them by hand.
 - **Nix, Ansible, chezmoi.** This runs before any package manager exists.
+- **iTerm2 shell integration.** Not on my current Mac, and its installer appends to
+  `~/.zshrc`. If I ever want it, it goes in a §2 unit.
+- **Work-only tools on my current Mac:** Slack, Zoom, gcloud, glab, gitlab-runner, buf,
+  protobuf, kubeconform, lua and redis. Also left out: one-offs (`wimlib`, `mcp-publisher`,
+  which witness's CI now runs) and autotools, which a build pulls in when it needs them.
 - **Not on my current Mac, so not here:** `fd`, `bat`, `eza`, `tree`, `yq`, `direnv` and
   `zoxide`. The aliases in `70-aliases` light up if any of them gets installed. Don't wire
   zoxide next to autojump: they fight over `j`.
