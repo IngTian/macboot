@@ -115,10 +115,17 @@ claude plugin install superpowers@claude-plugins-official
 claude plugin install frontend-design@claude-plugins-official
 claude plugin marketplace add DietrichGebert/ponytail
 claude plugin install ponytail@ponytail
+for l in pyright gopls rust-analyzer clangd; do claude plugin install $l-lsp@claude-plugins-official; done
 ```
 
 ponytail's hooks run `node`. Until §3 links node into `~/.local/bin` they fail harmlessly;
 restart Claude Code after §3.
+
+The four `-lsp` plugins give Claude Code real code intelligence (definitions, references,
+diagnostics) for the languages I use. Each one calls a server on PATH; §3 installs them:
+`pyright-langserver` (`uv tool install pyright`), `gopls` (`go install`), `rust-analyzer`
+(a rustup component, once Rust is installed) and `clangd` (it ships with the CLT). No
+TypeScript plugin: its server is a global npm install, which §3's Node rules rule out.
 
 - 👤 `adversarial-audit` is a local plugin with no remote, and it's read where it sits. Copy
   the old Mac's `~/devpro/adversarial-audit-plugin` to the same path (`settings.json` names
@@ -356,26 +363,29 @@ Only things I use outside projects are installed globally.
 | | Python | Node / TS | Go | Rust | C/C++ |
 |---|---|---|---|---|---|
 | manager | uv | nvm | brew `go` | rustup | the CLT |
-| default version | 3.13 | `lts/*` | brew's stable | `stable` | Apple clang |
+| default version | 3.14 | `lts/*` | brew's stable | `stable` | Apple clang |
 | project pin | `requires-python`, `uv.lock` | `.nvmrc`, `package-lock.json` | go.mod `go` line, `go.sum` | `rust-toolchain.toml`, `Cargo.lock` | — |
 | format | `ruff format` | VS Code built-in | `gofmt` | `cargo fmt` | `xcrun clang-format` |
 | lint | `ruff check` | `tsc` strict | `go vet`, plus staticcheck, errcheck, deadcode | `cargo clippy` | clangd's clang-tidy |
-| types | none (Pylance) | `typescript` per project | the compiler | the compiler | the compiler |
+| types | no CI gate; Pylance, plus pyright for Claude | `typescript` per project | the compiler | the compiler | the compiler |
 | test | `pytest` | `node --test`, or `vitest` where Vite is | `go test -race` | `cargo test` | `ctest` |
 | VS Code | Python, Ruff | built-in | Go (fetches gopls, dlv) | rust-analyzer | clangd |
+| Claude Code LSP | `pyright-lsp` | — | `gopls-lsp` | `rust-analyzer-lsp` | `clangd-lsp` |
 | global | `uv tool` apps | nothing | three linters in `~/go/bin` | rustfmt, clippy | `cmake`, `ninja` |
 
 **Python is uv's.** No conda, pyenv, `pip install` or global venv.
 
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh &&   # → ~/.local/bin
-  uv python install --default 3.13
+  uv python install --default 3.14 && uv tool install pyright   # pyright: for Claude Code's pyright-lsp
 ```
 
 - `--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
   3.9.6, years behind, and brew's `python3` arrives uninvited as a dependency of
-  pre-commit, autojump and ollama and wins. 3.13 is the newest version my CI tests. Older
-  versions arrive on demand: `uv sync --python 3.11`.
+  pre-commit, autojump and ollama and wins. 3.14 is the default for new work (3.13 has
+  been security-only since 3.15.0 shipped). Existing projects keep whatever their own
+  `requires-python` and CI say, and the versions they need arrive on demand:
+  `uv sync --python 3.11`.
 - Per project: `uv add --dev ruff pytest` puts them in `[dependency-groups] dev`, which
   `uv sync` installs by default. A `[project.optional-dependencies] dev` extra isn't
   installed by default, so a plain `uv sync` leaves pytest out. Then
@@ -438,8 +448,9 @@ done
   go1.N refuses a `go 1.N+1` module.
 - Vulnerabilities, when needed, with no install:
   `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`
-- VS Code: the Go extension (`golang.go`) installs `gopls`, and `dlv` the first time you
-  debug, into `~/go/bin` itself. Don't pre-install them.
+- `go install golang.org/x/tools/gopls@latest` for Claude Code's `gopls-lsp`. VS Code's Go
+  extension (`golang.go`) uses the same `~/go/bin/gopls` and keeps it updated. It also
+  installs `dlv` the first time you debug; don't pre-install that.
 - Not used: golangci-lint (it wraps the same checks), gofumpt, goimports (gopls organizes
   imports), and go.mod `tool` lines (tool deps join the module's version selection).
 
@@ -457,7 +468,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
 - The minimal profile plus rustfmt and clippy is the default profile without `rust-docs`,
   which is 718 MB of a 1.2 GB toolchain. §2 puts `~/.cargo/bin` on PATH.
 - `cargo fmt`, `cargo clippy` and `cargo test`; `rust-lldb` on top of the CLT's lldb.
-- VS Code: `rust-lang.rust-analyzer` bundles its own server, so no rust-analyzer component.
+- `rustup component add rust-analyzer` for Claude Code's `rust-analyzer-lsp`. VS Code's
+  `rust-lang.rust-analyzer` bundles its own server and doesn't need it.
 
 **C/C++ uses the CLT as the toolchain** (clang, lldb, clangd, clang-format), plus brew's
 `cmake` and `ninja`. No brew `llvm`, no vcpkg, no Conan; dependencies come per project
@@ -467,7 +479,8 @@ through CMake `FetchContent`.
   database, and `ctest` comes with cmake.
 - Run `xcrun clang-format`, since there's no `/usr/bin` shim. clang-tidy only ships with
   brew's llvm; clangd's built-in clang-tidy covers the editor.
-- VS Code: `llvm-vs-code-extensions.vscode-clangd`, which uses `/usr/bin/clangd`.
+- VS Code: `llvm-vs-code-extensions.vscode-clangd`. It and Claude Code's `clangd-lsp` both
+  use `/usr/bin/clangd`.
 
 **Swift**: the CLT's `swiftc`, which is what manifold builds with. Nothing else.
 
