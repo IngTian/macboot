@@ -26,7 +26,7 @@ decisions were always the valuable part. The scripted version is still in histor
 | 4 | Markets & research | TradingView, trading-desk, Kaggle, LaTeX, PDFs |
 | 5 | Notes, tasks & life | Obsidian, TickTick, daylogs, Google Drive, WPS Office |
 | 6 | Mac utilities | Raycast, Snipaste, AirStats, manifold, media CLIs |
-| 7 | Chat, calls & remote | WeChat, Discord, Slack, Zoom, Windows App |
+| 7 | Chat, calls & remote | WeChat, Discord, Windows App |
 | 8 | Games | Steam |
 | 9 | By hand 👤 | what stays human, and why |
 
@@ -60,7 +60,16 @@ decisions were always the valuable part. The scripted version is still in histor
 
 ## 0. Bootstrap 👤
 
-Each of these needs a person, in this order:
+Each of these needs a person, in this order. First, two things from the old Mac before
+anything writes over them:
+
+- 👤 **iCloud:** sign in and turn on **Desktop & Documents** (System Settings → Apple ID →
+  iCloud → iCloud Drive). Then wait for `~/Documents` to download. If you turn it on after
+  something has written to `~/Documents`, iCloud files the local copy under a folder named
+  after this Mac instead of merging it. daylogs and trading-desk live there.
+- 👤 **`~/.ssh`:** copy the old Mac's (`chmod 700 ~/.ssh; chmod 600 ~/.ssh/id_*` without the
+  `.pub` files). `gh auth login` below then uploads that key instead of generating a new one
+  that the old Mac's copy would overwrite.
 
 ```sh
 xcode-select --install     # 👤 dialog: Install, Agree, and wait until it's done. clang, git, the SDK
@@ -75,7 +84,7 @@ typeset -U path; path=(~/.local/bin $path)   # path_helper and shellenv just pus
 EOF
 eval "$(/opt/homebrew/bin/brew shellenv)"; export PATH="$HOME/.local/bin:$PATH"   # this shell too
 
-brew install gh && gh auth login --git-protocol ssh    # 👤 browser; also creates + uploads an SSH key
+brew install gh && gh auth login --git-protocol ssh    # 👤 browser; uploads ~/.ssh's key, or creates one
 curl -fsSL https://claude.ai/install.sh | bash          # Claude Code, native: auto-updates, ~/.local/bin/claude
 claude                                                   # 👤 browser login
 ```
@@ -109,6 +118,9 @@ claude plugin marketplace add DietrichGebert/ponytail
 claude plugin install ponytail@ponytail
 ```
 
+ponytail's hooks run `node`. Until §3 links node into `~/.local/bin` they fail harmlessly;
+restart Claude Code after §3.
+
 - 👤 `adversarial-audit` is a local plugin with no remote, and it's read where it sits. Copy
   the old Mac's `~/devpro/adversarial-audit-plugin` to the same path (`settings.json` names
   it), then:
@@ -125,10 +137,10 @@ claude plugin install ponytail@ponytail
   - Deny force-push with the flag anywhere (`git push --force*`, `git push -f*`,
     `git push *--force*`, `git push *-f *`).
   - Deny `git reset --hard*` and `git clean -f*`, `-d*` and `--force*`.
-- Hooks: witness adds four (below). 👤 The rest come from **iTerm2 → Install Claude Code
-  Integration**, which creates `~/.config/iterm2/cc-status` (a symlink into `iTerm.app`),
-  its hooks and its profile triggers. Hooks in a copied `settings.json` fail until it has
-  run. Don't write them by hand.
+- Hooks: witness adds four (below). The rest come from iTerm2's Claude Code integration
+  (§2). Until both have run, the hooks in a copied `settings.json` error on every call:
+  cc-status doesn't exist yet, and the witness hooks point at the old clone. That's
+  expected. Leave `settings.json` alone; both installers rewrite their own hooks.
 
 ### witness: a dated history of how I think and work, from my AI sessions
 
@@ -161,14 +173,15 @@ git clone https://github.com/IngTian/witness ~/devpro/ing/witness &&
 
 ### ollama
 
-`brew install --formula ollama`. The runner only (~30 MB). Pull models deliberately; they're
-0.3–3 GB each.
+`brew install --formula ollama && brew services start ollama`. The runner (~45 MB) starts at
+login. Pull models deliberately, since they're 0.3–3 GB each. The one I use is
+`nomic-embed-text` (274 MB).
 
 ## 2. Terminal & shell
 
 | app | cask | bundle | note |
 |---|---|---|---|
-| iTerm2 | `iterm2` | `iTerm.app` | ships `cc-status` for Claude Code (§1) |
+| iTerm2 | `iterm2` | `iTerm.app` | 👤 then **iTerm2 → Install Claude Code Integration**. It creates `~/.config/iterm2/cc-status` (a link into `iTerm.app`), its Claude Code hooks and its profile triggers. Don't write those by hand. 👤 Profile font: MesloLGS NF (see `powerlevel10k` below) |
 
 ```sh
 brew install --formula powerlevel10k zsh-autosuggestions zsh-completions fzf autojump \
@@ -177,7 +190,7 @@ brew install --formula powerlevel10k zsh-autosuggestions zsh-completions fzf aut
 
 | | why |
 |---|---|
-| `powerlevel10k` | the prompt. 👤 `p10k configure`, or copy `~/.p10k.zsh` (~90 KB of wizard answers) |
+| `powerlevel10k` | the prompt. 👤 Run `p10k configure` inside iTerm2, which also installs the MesloLGS NF font. Or copy `~/.p10k.zsh` (~90 KB of wizard answers) plus `~/Library/Fonts/MesloLGS NF *.ttf`, and set the font in the iTerm2 profile. Without the font, the icons show as boxes |
 | `zsh-autosuggestions` `zsh-completions` | grey inline suggestions; extra completions |
 | `fzf` | ⌃R history search that's actually usable |
 | `autojump` | `j <partial-dir>` |
@@ -238,8 +251,8 @@ numbered under 50 runs its own compinit: gcloud's cost 297 ms at `20-` and almos
 | `90-p10k` | the powerlevel10k theme, then `~/.p10k.zsh` |
 
 Copying beats rewriting. 👤 My current Mac keeps these units in `~/.config/macboot/conf.d/`
-and my own (gcloud, aliases) in `~/.config/zsh/conf.d/`. On the new Mac, both go into
-`~/.config/zsh/conf.d/`. Every unit is also in history: `git show f71dd6f:shell/conf.d/<unit>.zsh`.
+and my own aliases in `~/.config/zsh/conf.d/90-mine.zsh`. On the new Mac, both go into
+`~/.config/zsh/conf.d/`. Leave its `60-gcloud.zsh` behind: that one is work. Every unit is also in history: `git show f71dd6f:shell/conf.d/<unit>.zsh`.
 Before opening a new terminal, run
 `for f in ~/.config/zsh/rc.zsh ~/.config/zsh/conf.d/*.zsh; do zsh -n $f || echo BROKEN $f; done`.
 A syntax error here breaks every new terminal, including the one you'd use to fix it.
@@ -272,7 +285,7 @@ git lfs install
 | `shellcheck` `shfmt` `pre-commit` | writing shell |
 | `gnupg` | for signing commits and tags (nothing turns that on yet) |
 | `mkcert` | locally-trusted TLS certs |
-| `redis` | for experiments, never started as a service |
+| `redis` | a cache for experiments. Run `brew services start redis` only when a project needs it. It runs at login on my current Mac, and nothing uses it |
 
 ### git
 
@@ -334,7 +347,7 @@ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh &
 ```
 
 `--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
-3.9 with no pip, and brew's `python3` arrives uninvited as a dependency of pre-commit,
+3.9.6, years behind, and brew's `python3` arrives uninvited as a dependency of pre-commit,
 autojump and ollama and wins. Per project, run `uv sync` and commit `uv.lock`.
 
 **Node is nvm's**, for several versions side by side.
@@ -396,7 +409,10 @@ uv tool install trading-desk     # → desk, desk-migrate, desk-check
   Documents sync, so it arrives with the rest of `~/Documents`, and I open it from one Mac
   at a time. The tool's README prefers an unsynced folder (set `TRADING_DESK_HOME`), and
   copies off the machine as snapshots: `sqlite3 hub.db "VACUUM INTO '<dest>.db'"`.
-- On a new Mac, run `desk-migrate --check` before the first `desk`.
+- On a new Mac, run `desk-migrate --check` before the first `desk`. If `hub.db` hasn't
+  arrived from iCloud yet, skip the check and leave it on my list. My current Mac runs
+  `desk` from a dev checkout, so make sure PyPI's schema isn't behind the book's. The
+  check says so.
 - Check: `desk --version`.
 
 ## 5. Notes, tasks & life
@@ -420,8 +436,8 @@ uv tool install daylogs && mkdir -p ~/Documents/daylogs/inbox     # → day
   phone photos (daylogs never creates it). It expects iCloud **Desktop & Documents** sync;
   that's how the phone photos and the DB reach the Mac.
 - Keep every Mac that shares the DB on the same version: an older one can move the schema
-  stamp backwards. Run `uv tool upgrade daylogs` on the old Mac too, or pin this one with
-  `uv tool install daylogs==<old Mac's day --version>`.
+  stamp backwards. Install the latest here, then 👤 run `uv tool upgrade daylogs` on the
+  old Mac before it opens the DB again.
 - Estimates and the daily read call `claude -p`. Everything else works without it.
 - Check: `day --version`.
 
@@ -461,9 +477,9 @@ curl -fsSL https://raw.githubusercontent.com/IngTian/manifold/main/scripts/insta
 |---|---|---|---|
 | WeChat | `wechat` | `WeChat.app` | from the App Store on my current Mac; the cask works too |
 | Discord | `discord` | `Discord.app` | |
-| Slack | `slack` | `Slack.app` | |
-| Zoom | `zoom` | `zoom.us.app` | 👤 sudo (a `.pkg`) |
-| Windows App | `windows-app` | `Windows App.app` | 👤 sudo (a `.pkg`). RDP to my Windows desktop |
+| Windows App | `windows-app` | `Windows App.app` | 👤 sudo (a `.pkg`). RDP to my Windows desktop. When it only says "failed", `brew install --formula freerdp` and `xfreerdp /v:<host> +auth-only` show whether it's the credentials |
+
+Slack and Zoom are on my current Mac for work only, so they aren't listed.
 
 ## 8. Games
 
@@ -488,7 +504,9 @@ curl -fsSL https://raw.githubusercontent.com/IngTian/manifold/main/scripts/insta
 | Time Machine destination | enrolling a disk can erase it |
 | Full Disk Access for iTerm, if wanted | TCC is SIP-protected |
 | `chsh -s /bin/zsh`, only if `dscl . -read ~ UserShell` isn't zsh already | PAM password prompt |
-| data from the old Mac: `~/.claude/` (§0), witness history (§1, *before* installing), zsh units (§2), `~/.p10k.zsh`, `~/.ssh`, `~/.kaggle/`, `~/devpro/adversarial-audit-plugin` | not mine to sync blindly. daylogs and trading-desk arrive through iCloud |
+| iCloud sign-in with Desktop & Documents on, before anything writes to `~/Documents` (§0) | Apple ID 2FA. Turned on late, it splits `~/Documents` instead of merging it |
+| `uv tool upgrade daylogs` on the old Mac (§5) | another machine |
+| data from the old Mac: `~/.ssh` and `~/.claude/` (§0), witness history (§1, *before* installing), zsh units (§2), `~/.p10k.zsh` and the MesloLGS NF fonts, `~/.kaggle/`, `~/devpro/adversarial-audit-plugin` | not mine to sync blindly. daylogs and trading-desk arrive through iCloud |
 
 ## Not installed, on purpose
 
