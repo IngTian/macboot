@@ -382,8 +382,9 @@ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh &
 
 - `--default` puts `python` and `python3` in `~/.local/bin`. Otherwise `/usr/bin/python3` is
   3.9.6, years behind, and brew's `python3` arrives uninvited as a dependency of
-  pre-commit, autojump and ollama and wins. 3.14 is my CI ceiling; 3.13 has been
-  security-only since 3.15.0 shipped. Older versions arrive on demand:
+  pre-commit, autojump and ollama and wins. 3.14 is the default for new work (3.13 has
+  been security-only since 3.15.0 shipped). Existing projects keep whatever their own
+  `requires-python` and CI say, and the versions they need arrive on demand:
   `uv sync --python 3.11`.
 - Per project: `uv add --dev ruff pytest` puts them in `[dependency-groups] dev`, which
   `uv sync` installs by default. A `[project.optional-dependencies] dev` extra isn't
